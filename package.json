@@ -1,0 +1,16 @@
+{
+  "name": "pulsefield",
+  "private": true,
+  "version": "0.1.0",
+  "homepage": "https://markovigele.github.io/pulsefield/",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview --host"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "vite": "^6.3.5"
+  }
+}
