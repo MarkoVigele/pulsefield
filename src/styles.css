@@ -109,8 +109,29 @@ body {
 .source-line,
 .hint,
 .field span,
-.quality legend {
+.quality legend,
+.presets legend {
   color: var(--muted);
+}
+
+.preset-inline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.preset-inline select {
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: 500 11px/1.2 var(--mono);
+  min-height: 28px;
+  max-width: 46vw;
+  padding: 0;
 }
 
 .brand small,
@@ -432,14 +453,53 @@ body {
   min-height: 28px;
 }
 
+.presets,
 .quality {
   border: 1px solid var(--line);
   border-radius: 14px;
   padding: 10px 12px 12px;
 }
 
+.presets legend,
 .quality legend {
   padding: 0 6px;
+}
+
+.preset-grid {
+  display: grid;
+  gap: 6px;
+}
+
+.preset-btn {
+  appearance: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: #111822;
+  color: var(--text);
+  font: 500 14px/1.2 var(--font);
+  text-align: left;
+}
+
+.preset-btn small {
+  font: 400 10px/1.25 var(--mono);
+  color: var(--muted);
+}
+
+.preset-btn.is-on {
+  background: var(--accent-dim);
+  border-color: rgba(62, 224, 195, 0.4);
+  color: var(--accent);
+}
+
+.preset-btn.is-on small {
+  color: rgba(210, 255, 244, 0.7);
 }
 
 .seg {
