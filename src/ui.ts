@@ -13,8 +13,10 @@ import {
   PALETTES,
   type Settings,
   commitSettings,
+  loadHud,
   loadSettings,
   resetSettings,
+  saveHud,
 } from "./settings";
 import {
   SCO_HINT,
@@ -51,10 +53,13 @@ export type UiHandles = {
   fileInput: HTMLInputElement;
   toast: (message: string) => void;
   refreshHud: () => void;
+  refreshMeters: () => void;
+  setFps: (label: string) => void;
 };
 
 export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
   let settings = loadSettings();
+  let hudPrefs = loadHud();
   let toastTimer = 0;
   let inputs: LabAudioInput[] = [];
   let pickedDeviceId = "";
@@ -75,6 +80,9 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
 
   parent.innerHTML = `
     <canvas id="viz" class="viz" aria-label="Bars Classic Visualizer"></canvas>
+    <div class="fps-hud" id="fps-hud"${hudPrefs.showFps ? "" : " hidden"}>
+      <span id="fps-readout">— fps</span>
+    </div>
     <div class="drop-veil" id="drop-veil" hidden>Audiodatei hier ablegen</div>
     <div class="chrome">
       <header class="hud">
@@ -223,6 +231,12 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
             <p class="hint">Niedrig spart Speichen, Partikel und Zellen. Mobil startet auf Niedrig.</p>
           </fieldset>
 
+          <label class="field field--row">
+            <span>Bildrate</span>
+            <input type="checkbox" id="show-fps" />
+          </label>
+          <p class="hint">Ecke oben rechts. Gemessene Frames, Ziel 60.</p>
+
           <button type="button" class="reset" data-act="reset">Auf Standard zurücksetzen</button>
         </div>
       </aside>
@@ -242,6 +256,18 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
   const presetSelect = must(parent, "#preset-select", HTMLSelectElement);
   const routeHint = must(parent, "#route-hint", HTMLElement);
   const dropVeil = must(parent, "#drop-veil", HTMLElement);
+  const fpsHud = must(parent, "#fps-hud", HTMLElement);
+  const fpsReadout = must(parent, "#fps-readout", HTMLElement);
+  const showFpsInput = must(parent, "#show-fps", HTMLInputElement);
+  const peakEl = must(parent, "#m-peak", HTMLElement);
+  const rmsEl = must(parent, "#m-rms", HTMLElement);
+  const lowEl = must(parent, "#b-low", HTMLElement);
+  const midEl = must(parent, "#b-mid", HTMLElement);
+  const highEl = must(parent, "#b-high", HTMLElement);
+  let lastPeak = "";
+  let lastRms = "";
+  let lastFps = "";
+  let lastSource = "";
 
   const toast = (message: string) => {
     toastEl.textContent = message;
@@ -302,18 +328,55 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
     }
   };
 
-  const refreshHud = () => {
+  const paintBand = (el: HTMLElement, unit: number) => {
+    el.style.transform = `scaleX(${Math.min(1, Math.max(0.04, unit))})`;
+  };
+
+  const refreshMeters = () => {
     const { peak, rms, low, mid, high } = lab.metrics;
-    setText(parent, "#m-peak", peak.toFixed(2));
-    setText(parent, "#m-rms", rms.toFixed(2));
-    setWidth(parent, "#b-low", low);
-    setWidth(parent, "#b-mid", mid);
-    setWidth(parent, "#b-high", high);
+    const peakText = peak.toFixed(2);
+    const rmsText = rms.toFixed(2);
+    if (peakText !== lastPeak) {
+      peakEl.textContent = peakText;
+      lastPeak = peakText;
+    }
+    if (rmsText !== lastRms) {
+      rmsEl.textContent = rmsText;
+      lastRms = rmsText;
+    }
+    paintBand(lowEl, low);
+    paintBand(midEl, mid);
+    paintBand(highEl, high);
+  };
+
+  const refreshSource = () => {
     const idle = lab.kind === "none";
     const mobileNote = isMobileLab() && idle ? " · Mobil: Qualität Niedrig" : "";
     const idleHint = idle ? " · Mic, Datei oder Tab (Desktop)" : "";
-    sourceLine.textContent = `${lab.label}${idle && lab.label === "Kein Eingang" ? idleHint : ""}${mobileNote}`;
+    const text = `${lab.label}${idle && lab.label === "Kein Eingang" ? idleHint : ""}${mobileNote}`;
+    if (text !== lastSource) {
+      sourceLine.textContent = text;
+      lastSource = text;
+    }
     syncRouteHint();
+  };
+
+  const refreshHud = () => {
+    refreshMeters();
+    refreshSource();
+  };
+
+  const setFps = (label: string) => {
+    if (label === lastFps) return;
+    lastFps = label;
+    fpsReadout.textContent = label;
+  };
+
+  const applyHud = (next: typeof hudPrefs) => {
+    hudPrefs = next;
+    saveHud(hudPrefs);
+    fpsHud.hidden = !hudPrefs.showFps;
+    showFpsInput.checked = hudPrefs.showFps;
   };
 
   const syncForm = () => {
@@ -341,6 +404,8 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
     for (const btn of parent.querySelectorAll<HTMLButtonElement>("[data-preset]")) {
       btn.classList.toggle("is-on", btn.dataset.preset === settings.preset);
     }
+    showFpsInput.checked = hudPrefs.showFps;
+    fpsHud.hidden = !hudPrefs.showFps;
   };
 
   const persist = (next: Settings) => {
@@ -430,6 +495,10 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
       if (next === "bars" || next === "ring" || next === "ribbon" || next === "particles" || next === "bloom") {
         choosePreset(next);
       }
+      return;
+    }
+    if (el === showFpsInput) {
+      applyHud({ showFps: showFpsInput.checked });
       return;
     }
     const key = el.dataset.key as keyof Settings | undefined;
@@ -530,6 +599,8 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
     fileInput,
     toast,
     refreshHud,
+    refreshMeters,
+    setFps,
   };
 }
 
@@ -581,9 +652,4 @@ function must<T extends Element>(root: ParentNode, sel: string, ctor: new () => 
 function setText(root: ParentNode, sel: string, value: string): void {
   const el = root.querySelector(sel);
   if (el) el.textContent = value;
-}
-
-function setWidth(root: ParentNode, sel: string, unit: number): void {
-  const el = root.querySelector<HTMLElement>(sel);
-  if (el) el.style.transform = `scaleX(${Math.min(1, Math.max(0.04, unit))})`;
 }

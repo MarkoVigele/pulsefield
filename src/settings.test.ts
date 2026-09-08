@@ -4,13 +4,16 @@ import { beforeEach, test } from "node:test";
 import { PRESET_LABEL, PRESETS, presetDefaults } from "./presets.ts";
 import { particleBudget, scaledDensity } from "./quality.ts";
 import {
+  HUD_STORAGE_KEY,
   LEGACY_STORAGE_KEY,
   commitSettings,
   defaultSettings,
   hydrateSettings,
+  loadHud,
   loadSettings,
   resetSettings,
   sanitizeSettings,
+  saveHud,
 } from "./settings.ts";
 
 beforeEach(() => {
@@ -110,4 +113,14 @@ test("quality scales density and particle budget", () => {
   assert.ok(scaledDensity(64, "low", 8, 160) < scaledDensity(64, "high", 8, 160));
   assert.ok(particleBudget(64, "low") < particleBudget(64, "high"));
   assert.ok(particleBudget(80, "high") <= 480);
+});
+
+test("FPS overlay defaults on and persists separately from presets", () => {
+  assert.equal(loadHud().showFps, true);
+  saveHud({ showFps: false });
+  assert.equal(loadHud().showFps, false);
+  assert.ok(localStorage.getItem(HUD_STORAGE_KEY));
+  let state = defaultSettings("bars", false);
+  state = commitSettings(state, { ...state, bloom: 0.4 });
+  assert.equal(loadHud().showFps, false);
 });

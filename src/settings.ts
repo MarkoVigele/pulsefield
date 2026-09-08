@@ -222,3 +222,28 @@ export function resetSettings(preset?: PresetId): Settings {
   return hydrateSettings(active, store.quality);
 }
 
+export const HUD_STORAGE_KEY = "pulsefield.hud.v1";
+
+export type HudPrefs = {
+  showFps: boolean;
+};
+
+export function defaultHud(): HudPrefs {
+  return { showFps: true };
+}
+
+export function loadHud(): HudPrefs {
+  try {
+    const raw = localStorage.getItem(HUD_STORAGE_KEY);
+    if (!raw) return defaultHud();
+    const parsed = JSON.parse(raw) as Partial<HudPrefs>;
+    return { showFps: parsed.showFps !== false };
+  } catch {
+    return defaultHud();
+  }
+}
+
+export function saveHud(prefs: HudPrefs): void {
+  localStorage.setItem(HUD_STORAGE_KEY, JSON.stringify(prefs));
+}
+

@@ -1,4 +1,5 @@
 import { AudioLab } from "./audio";
+import { createPace, formatFps, stepPace } from "./loop";
 import { mountUi } from "./ui";
 import { createVisualizer } from "./viz";
 import "./styles.css";
@@ -11,8 +12,15 @@ if (!root) {
 const lab = new AudioLab();
 const ui = mountUi(root, lab);
 let renderer = createVisualizer(ui.getSettings().preset);
+let binScratch = new Uint8Array(0);
+const pace = createPace(performance.now());
+let raf = 0;
 
 function frame(now: number): void {
+  raf = requestAnimationFrame(frame);
+  if (document.visibilityState === "hidden") return;
+  if (!stepPace(pace, now)) return;
+
   const settings = ui.getSettings();
   if (renderer.id !== settings.preset) {
     renderer = createVisualizer(settings.preset);
@@ -27,17 +35,38 @@ function frame(now: number): void {
   if (ctx) {
     renderer.draw(ctx, ui.canvas, boosted, settings, now);
   }
-  ui.refreshHud();
-  requestAnimationFrame(frame);
+  ui.refreshMeters();
+  ui.setFps(formatFps(pace.fps));
 }
 
 function scaleBins(source: Uint8Array, sensitivity: number): Uint8Array<ArrayBuffer> {
-  const out = new Uint8Array(source.length);
+  if (binScratch.length !== source.length) {
+    binScratch = new Uint8Array(source.length);
+  }
   const k = sensitivity;
   for (let i = 0; i < source.length; i += 1) {
-    out[i] = Math.min(255, Math.round((source[i] ?? 0) * k));
+    binScratch[i] = Math.min(255, Math.round((source[i] ?? 0) * k));
   }
-  return out;
+  return binScratch;
 }
 
-requestAnimationFrame(frame);
+function startLoop(): void {
+  if (raf) return;
+  Object.assign(pace, createPace(performance.now()));
+  raf = requestAnimationFrame(frame);
+}
+
+function stopLoop(): void {
+  cancelAnimationFrame(raf);
+  raf = 0;
+}
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "hidden") {
+    stopLoop();
+    return;
+  }
+  startLoop();
+});
+
+startLoop();

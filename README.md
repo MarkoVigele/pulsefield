@@ -66,9 +66,14 @@ Im Sheet (unten auf Mobil, rechts auf Desktop), Preset auch oben im HUD:
 - Empfindlichkeit, Glättung, FFT-Größe
 - Farbpalette, Bloom/Glow, Dichte (Balken / Speichen / Segmente / Partikel / Zellen), Spiegeln, Tempo, Hintergrund
 - Qualität Niedrig / Mittel / Hoch — skaliert Auflösung, Glow und Anzahlen
+- Bildrate-Anzeige (Standard an), Ziel 60 fps
 - Auf Standard zurücksetzen (aktives Preset)
 
 Sichtbar reaktiv auf Peak, RMS und Tief/Mitte/Hoch. Mobil startet auf Qualität Niedrig.
+
+## Bildrate
+
+Die Zeichenschleife hängt an `requestAnimationFrame` (vsync) und gibt **höchstens 60** Frames pro Sekunde aus. Ein festes 60 ist im Browser nur so gut wie der vsync des Geräts: 120-Hz-Displays werden auf 60 gedeckelt; wenn das System im Leerlauf auf 30 drosselt, erfinden wir keine Frames. Halten auf dem Bildschirm kann den vsync wachhalten — das Overlay zählt nur wirklich gezeichnete Frames.
 
 ## GitHub Pages
 
