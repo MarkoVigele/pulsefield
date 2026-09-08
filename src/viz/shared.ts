@@ -3,14 +3,49 @@ import { paletteGlow } from "../palettes";
 import { bloomScaleFor, pixelRatioFor } from "../quality";
 import type { Settings } from "../settings";
 
+type CanvasBox = { w: number; h: number };
+const boxCache = new WeakMap<HTMLCanvasElement, CanvasBox>();
+const boxWatch = new WeakSet<HTMLCanvasElement>();
+
+function readBox(canvas: HTMLCanvasElement): CanvasBox {
+  const cached = boxCache.get(canvas);
+  if (cached && cached.w > 0 && cached.h > 0) return cached;
+  const rect = canvas.getBoundingClientRect();
+  const box = { w: rect.width, h: rect.height };
+  boxCache.set(canvas, box);
+  return box;
+}
+
+function watchBox(canvas: HTMLCanvasElement): void {
+  if (boxWatch.has(canvas) || typeof ResizeObserver === "undefined") return;
+  boxWatch.add(canvas);
+  const ro = new ResizeObserver((entries) => {
+    const cr = entries[0]?.contentRect;
+    if (!cr) return;
+    boxCache.set(canvas, { w: cr.width, h: cr.height });
+  });
+  ro.observe(canvas);
+}
+
 export function resizeCanvas(
   canvas: HTMLCanvasElement,
   quality: Settings["quality"],
 ): CanvasRenderingContext2D | null {
   const dpr = pixelRatioFor(quality);
-  const rect = canvas.getBoundingClientRect();
-  const w = Math.max(1, Math.floor(rect.width * dpr));
-  const h = Math.max(1, Math.floor(rect.height * dpr));
+  if (typeof ResizeObserver === "undefined") {
+    const rect = canvas.getBoundingClientRect();
+    const w = Math.max(1, Math.floor(rect.width * dpr));
+    const h = Math.max(1, Math.floor(rect.height * dpr));
+    if (canvas.width !== w || canvas.height !== h) {
+      canvas.width = w;
+      canvas.height = h;
+    }
+    return canvas.getContext("2d");
+  }
+  watchBox(canvas);
+  const box = readBox(canvas);
+  const w = Math.max(1, Math.floor(box.w * dpr));
+  const h = Math.max(1, Math.floor(box.h * dpr));
   if (canvas.width !== w || canvas.height !== h) {
     canvas.width = w;
     canvas.height = h;
