@@ -1,4 +1,5 @@
-import { AudioLab, canCaptureTab, canUseMicrophone } from "./audio";
+import { AudioLab } from "./audio";
+import { isMobileLab } from "./quality";
 import {
   BACKGROUNDS,
   FFT_SIZES,
@@ -8,7 +9,14 @@ import {
   resetSettings,
   saveSettings,
 } from "./settings";
-import { isMobileLab } from "./quality";
+import {
+  SCO_HINT,
+  canUseMicrophone,
+  listAudioInputs,
+  microphonePermissionGranted,
+  tabCaptureOffered,
+  type LabAudioInput,
+} from "./sources";
 
 const PALETTE_LABEL: Record<(typeof PALETTES)[number], string> = {
   signal: "Signal",
@@ -25,6 +33,8 @@ const BG_LABEL: Record<(typeof BACKGROUNDS)[number], string> = {
   dusk: "Dämmerung",
 };
 
+const FILE_ACCEPT = "audio/*,.mp3,.wav,.ogg,.oga,.m4a,.flac,.aac,.opus,.webm";
+
 export type UiHandles = {
   root: HTMLElement;
   canvas: HTMLCanvasElement;
@@ -39,9 +49,15 @@ export type UiHandles = {
 export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
   let settings = loadSettings();
   let toastTimer = 0;
+  let inputs: LabAudioInput[] = [];
+  let pickedDeviceId = "";
+  const tabOk = tabCaptureOffered();
+  const micOk = canUseMicrophone();
+  const phone = !tabOk;
 
   parent.innerHTML = `
     <canvas id="viz" class="viz" aria-label="Bars Classic Visualizer"></canvas>
+    <div class="drop-veil" id="drop-veil" hidden>Audiodatei hier ablegen</div>
     <div class="chrome">
       <header class="hud">
         <div class="brand">
@@ -60,21 +76,48 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
         </div>
       </header>
 
-      <p class="source-line" id="source-line">Kein Eingang · Labor bereit</p>
+      <div class="source-stack">
+        <p class="source-line" id="source-line">Kein Eingang · Labor bereit</p>
+        <label class="device-pick" id="device-pick" hidden>
+          <span>Quellen am Gerät</span>
+          <select id="mic-device" aria-label="Mikrofon am Gerät"></select>
+        </label>
+        <p class="route-hint" id="route-hint" hidden></p>
+      </div>
 
-      <nav class="dock" aria-label="Eingänge">
-        <button type="button" class="dock-btn" data-act="mic"${canUseMicrophone() ? "" : " disabled"}>
-          Mikrofon
-        </button>
-        <button type="button" class="dock-btn" data-act="tab"${canCaptureTab() ? "" : " disabled"}>
-          Tab / System
-        </button>
-        <button type="button" class="dock-btn" data-act="file">Datei</button>
-        <button type="button" class="dock-btn dock-btn--ghost" data-act="stop">Stop</button>
-        <button type="button" class="dock-btn dock-btn--lab" data-act="sheet" aria-expanded="false" aria-controls="sheet">
-          Labor
-        </button>
-      </nav>
+      <div class="floor">
+        <aside class="limits" id="limits" role="note">
+          <strong>Grenzen</strong>
+          <ul>
+            <li>Handy kann Spotify oder Bluetooth-Wiedergabe nicht abfangen. A2DP ist kein Mikrofon.</li>
+            <li>Tab-/System-Audio nur Desktop-Chrome. Im Teilen-Dialog den Haken „Tab-Audio teilen“ / „Systemaudio“ setzen.</li>
+            <li>Bluetooth-Headset kann Anruf-/SCO-Routing auslösen. Der Browser verhindert das nicht zuverlässig.</li>
+          </ul>
+        </aside>
+
+        <nav class="dock" aria-label="Eingänge">
+          <button type="button" class="dock-btn${phone ? " dock-btn--primary" : ""}" data-act="mic"${micOk ? "" : " disabled"}>
+            Mikrofon
+            <small>${micOk ? "Geräteliste nach Freigabe" : "Nicht verfügbar"}</small>
+          </button>
+          <button type="button" class="dock-btn dock-btn--file${phone ? " dock-btn--primary" : ""}" data-act="file">
+            Datei
+            <small>MP3, WAV, OGG · vom Gerät</small>
+          </button>
+          <button type="button" class="dock-btn${tabOk ? " dock-btn--primary" : ""}" data-act="tab"${tabOk ? "" : " disabled"} title="${tabOk ? "Chrome-Dialog: Audio teilen aktivieren" : "Nur Desktop-Chrome"}">
+            Tab / System
+            <small>${tabOk ? "Haken „Audio teilen“" : "Nur Desktop"}</small>
+          </button>
+          <button type="button" class="dock-btn dock-btn--ghost" data-act="stop">
+            Stop
+            <small>Eingang trennen</small>
+          </button>
+          <button type="button" class="dock-btn dock-btn--lab" data-act="sheet" aria-expanded="false" aria-controls="sheet">
+            Labor
+            <small>Bars Classic</small>
+          </button>
+        </nav>
+      </div>
     </div>
 
     <div class="sheet-root" id="sheet-root" hidden>
@@ -86,7 +129,16 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
           <button type="button" class="text-btn" data-act="close-sheet">Schließen</button>
         </header>
         <div class="sheet-body">
-          <p class="hint" id="tab-hint"></p>
+          <section class="limits limits--sheet">
+            <strong>Eingänge und Grenzen</strong>
+            <ul>
+              <li>Wir listen nur Quellen, die das Gerät selbst als <code>audioinput</code> oder per Datei hergibt. Systemklang nur, wenn der Browser ihn wirklich anbietet (Desktop-Chrome: Tab/System).</li>
+              <li>Spotify über Bluetooth-Lautsprecher ist keine Eingangsquelle. Browser können A2DP-Wiedergabe nicht anzapfen.</li>
+              <li>Tab-Audio: Desktop-Chrome, Teilen-Dialog, Haken „Tab-Audio teilen“ oder „Systemaudio“. Ohne Haken bleibt das Feld still.</li>
+              <li>Mikrofon: nach der Freigabe Gerät wählen. echoCancellation, noiseSuppression, autoGainControl und voiceIsolation stehen auf aus — der Anrufmodus kann das Betriebssystem trotzdem erzwingen, sobald ein Bluetooth-Headset als Mic dient.</li>
+              <li>Datei: MP3, WAV, OGG, M4A, FLAC, AAC. Button, Dateidialog oder Datei auf das Feld ziehen.</li>
+            </ul>
+          </section>
 
           <label class="field">
             <span>Empfindlichkeit <b id="v-sensitivity"></b></span>
@@ -146,7 +198,7 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
       </aside>
     </div>
 
-    <input id="file" type="file" accept="audio/*,.mp3,.wav,.ogg,.m4a,.flac,.aac" hidden />
+    <input id="file" type="file" accept="${FILE_ACCEPT}" hidden />
     <div class="toast" id="toast" role="status" hidden></div>
   `;
 
@@ -155,11 +207,10 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
   const sheetRoot = must(parent, "#sheet-root", HTMLElement);
   const toastEl = must(parent, "#toast", HTMLElement);
   const sourceLine = must(parent, "#source-line", HTMLElement);
-  const tabHint = must(parent, "#tab-hint", HTMLElement);
-
-  tabHint.textContent = isMobileLab()
-    ? "Hinweis: Auf dem Handy ist Tab-/Systemton oft gesperrt oder ohne Audio. Mikrofon oder Datei sind der verlässliche Weg."
-    : "Für Tab-/Systemton einen Tab oder Bildschirm teilen und „Tab-Audio teilen“ aktivieren. Ohne diesen Haken bleibt das Feld still.";
+  const devicePick = must(parent, "#device-pick", HTMLLabelElement);
+  const deviceSelect = must(parent, "#mic-device", HTMLSelectElement);
+  const routeHint = must(parent, "#route-hint", HTMLElement);
+  const dropVeil = must(parent, "#drop-veil", HTMLElement);
 
   const toast = (message: string) => {
     toastEl.textContent = message;
@@ -167,7 +218,57 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
     window.clearTimeout(toastTimer);
     toastTimer = window.setTimeout(() => {
       toastEl.hidden = true;
-    }, 4200);
+    }, 4800);
+  };
+
+  const selectedInput = (): LabAudioInput | undefined =>
+    inputs.find((item) => item.deviceId === pickedDeviceId) ?? inputs[0];
+
+  const paintDevices = () => {
+    const named = inputs.filter((item) => item.deviceId);
+    const visible = named.some((item) => item.rawLabel.length > 0);
+    devicePick.hidden = !visible;
+    if (!visible) return;
+
+    const current = pickedDeviceId || lab.deviceId;
+    deviceSelect.replaceChildren();
+    for (const item of named) {
+      const option = document.createElement("option");
+      option.value = item.deviceId;
+      option.textContent = item.label;
+      deviceSelect.append(option);
+    }
+    if (current && named.some((item) => item.deviceId === current)) {
+      deviceSelect.value = current;
+      pickedDeviceId = current;
+    } else {
+      pickedDeviceId = named[0]?.deviceId ?? "";
+      if (pickedDeviceId) deviceSelect.value = pickedDeviceId;
+    }
+    syncRouteHint();
+  };
+
+  const syncRouteHint = () => {
+    const choice = selectedInput();
+    const fromLab = lab.kind === "mic" && lab.bluetoothLikely;
+    const fromPick = Boolean(choice?.bluetoothLikely || choice?.communications);
+    if (fromLab || fromPick) {
+      routeHint.hidden = false;
+      routeHint.textContent = SCO_HINT;
+    } else {
+      routeHint.hidden = true;
+      routeHint.textContent = "";
+    }
+  };
+
+  const refreshDevices = async () => {
+    try {
+      inputs = await listAudioInputs();
+      const granted = inputs.some((item) => item.rawLabel.length > 0) || (await microphonePermissionGranted());
+      if (granted) paintDevices();
+    } catch {
+      /* enumerateDevices can fail before any gesture */
+    }
   };
 
   const refreshHud = () => {
@@ -177,8 +278,11 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
     setWidth(parent, "#b-low", low);
     setWidth(parent, "#b-mid", mid);
     setWidth(parent, "#b-high", high);
-    const mobileNote = isMobileLab() && lab.kind === "none" ? " · Mobil: Qualität Niedrig" : "";
-    sourceLine.textContent = `${lab.label}${mobileNote}`;
+    const idle = lab.kind === "none";
+    const mobileNote = isMobileLab() && idle ? " · Mobil: Qualität Niedrig" : "";
+    const idleHint = idle ? " · Mic, Datei oder Tab (Desktop)" : "";
+    sourceLine.textContent = `${lab.label}${idle && lab.label === "Kein Eingang" ? idleHint : ""}${mobileNote}`;
+    syncRouteHint();
   };
 
   const syncForm = () => {
@@ -215,6 +319,14 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
     toggle?.setAttribute("aria-expanded", String(open));
   };
 
+  const openFile = () => {
+    fileInput.click();
+  };
+
+  const playFile = (file: File) => {
+    void runInput(() => lab.startFile(file, settings.fftSize, settings.smoothing), `Datei: ${file.name}`);
+  };
+
   parent.addEventListener("click", (event) => {
     const btn = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-act], [data-quality]");
     if (!btn) return;
@@ -234,17 +346,34 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
       lab.stop();
       refreshHud();
     }
-    if (act === "file") fileInput.click();
+    if (act === "file") openFile();
     if (act === "mic") {
-      void runInput(() => lab.startMic(settings.fftSize, settings.smoothing), "Mikrofon verbunden.");
+      void startMic();
     }
     if (act === "tab") {
-      void runInput(() => lab.startTab(settings.fftSize, settings.smoothing), "Tab-/Systemton verbunden.");
+      if (!tabOk) {
+        toast("Tab-/System-Audio gibt es nur auf Desktop-Chrome. Handy: Mikrofon oder Datei.");
+        return;
+      }
+      toast("Chrome-Dialog: Tab oder Bildschirm wählen und „Tab-Audio teilen“ / „Systemaudio“ anhaken.");
+      void runInput(
+        () => lab.startTab(settings.fftSize, settings.smoothing),
+        "Tab-/Systemton verbunden.",
+        "Teilen abgebrochen oder verweigert.",
+      );
     }
   });
 
   parent.addEventListener("input", (event) => {
     const el = event.target as HTMLInputElement | HTMLSelectElement;
+    if (el === deviceSelect) {
+      pickedDeviceId = deviceSelect.value;
+      syncRouteHint();
+      if (lab.kind === "mic" || lab.kind === "none") {
+        void startMic();
+      }
+      return;
+    }
     const key = el.dataset.key as keyof Settings | undefined;
     if (!key) return;
     const next = { ...settings };
@@ -268,28 +397,71 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
     const file = fileInput.files?.[0];
     fileInput.value = "";
     if (!file) return;
-    void runInput(() => lab.startFile(file, settings.fftSize, settings.smoothing), `Datei: ${file.name}`);
+    playFile(file);
   });
 
-  async function runInput(fn: () => Promise<void>, ok: string): Promise<void> {
+  const setDrop = (on: boolean) => {
+    dropVeil.hidden = !on;
+  };
+
+  parent.addEventListener("dragenter", (event) => {
+    if (hasAudioFile(event.dataTransfer)) {
+      event.preventDefault();
+      setDrop(true);
+    }
+  });
+  parent.addEventListener("dragover", (event) => {
+    if (hasAudioFile(event.dataTransfer)) {
+      event.preventDefault();
+      setDrop(true);
+    }
+  });
+  parent.addEventListener("dragleave", (event) => {
+    if (event.target === parent || event.target === dropVeil) setDrop(false);
+  });
+  parent.addEventListener("drop", (event) => {
+    event.preventDefault();
+    setDrop(false);
+    const file = [...(event.dataTransfer?.files ?? [])].find((item) => isAudioLike(item));
+    if (file) playFile(file);
+    else toast("Eine Audiodatei ablegen (MP3, WAV, OGG …).");
+  });
+
+  navigator.mediaDevices?.addEventListener("devicechange", () => {
+    void refreshDevices();
+  });
+
+  async function startMic(): Promise<void> {
+    const id = pickedDeviceId || undefined;
+    await runInput(async () => {
+      if (id) {
+        await lab.startMic(settings.fftSize, settings.smoothing, id);
+      } else {
+        await lab.startMic(settings.fftSize, settings.smoothing);
+      }
+      pickedDeviceId = lab.deviceId || pickedDeviceId;
+      await refreshDevices();
+    }, "Mikrofon verbunden.");
+    if (lab.kind === "mic" && lab.bluetoothLikely) {
+      toast(SCO_HINT);
+    }
+  }
+
+  async function runInput(fn: () => Promise<void>, ok: string, denied?: string): Promise<void> {
     try {
       await fn();
-      toast(ok);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Eingang fehlgeschlagen.";
-      if (message.toLowerCase().includes("denied") || message.toLowerCase().includes("notallowed")) {
-        toast("Zugriff wurde verweigert.");
-      } else if (message.toLowerCase().includes("abort") || message.toLowerCase().includes("cancel")) {
-        toast("Auswahl abgebrochen.");
-      } else {
-        toast(message);
+      if (!(lab.kind === "mic" && lab.bluetoothLikely)) {
+        toast(ok);
       }
+    } catch (error) {
+      toast(friendlyInputError(error, denied));
     }
     refreshHud();
   }
 
   syncForm();
   refreshHud();
+  void refreshDevices();
 
   return {
     root: parent,
@@ -301,6 +473,43 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
     toast,
     refreshHud,
   };
+}
+
+function friendlyInputError(error: unknown, denied?: string): string {
+  const name = error instanceof DOMException ? error.name : "";
+  const message = error instanceof Error ? error.message : "Eingang fehlgeschlagen.";
+  const lower = message.toLowerCase();
+  if (name === "AbortError" || lower.includes("abort") || lower.includes("cancel")) {
+    return denied ?? "Auswahl abgebrochen.";
+  }
+  if (name === "NotAllowedError" || lower.includes("denied") || lower.includes("notallowed")) {
+    return denied ?? "Zugriff wurde verweigert.";
+  }
+  if (name === "NotFoundError" || lower.includes("not found") || lower.includes("notfound")) {
+    return "Kein passendes Gerät gefunden.";
+  }
+  if (name === "NotReadableError" || lower.includes("not readable")) {
+    return "Gerät ist belegt oder nicht lesbar.";
+  }
+  if (name === "OverconstrainedError") {
+    return "Dieses Gerät erfüllt die Audio-Anforderungen nicht.";
+  }
+  if (name === "SecurityError") {
+    return "Zugriff blockiert. HTTPS oder localhost nötig.";
+  }
+  return message;
+}
+
+function hasAudioFile(transfer: DataTransfer | null): boolean {
+  if (!transfer) return false;
+  if ([...transfer.items].some((item) => item.kind === "file" && item.type.startsWith("audio/"))) {
+    return true;
+  }
+  return [...transfer.types].includes("Files");
+}
+
+function isAudioLike(file: File): boolean {
+  return file.type.startsWith("audio/") || /\.(mp3|wav|ogg|oga|m4a|flac|aac|opus|webm)$/i.test(file.name);
 }
 
 function must<T extends Element>(root: ParentNode, sel: string, ctor: new () => T): T {

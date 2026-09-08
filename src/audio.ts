@@ -1,4 +1,14 @@
 import type { FftSize } from "./settings";
+import {
+  canUseMicrophone,
+  displayMediaAttempts,
+  fallbackMicConstraints,
+  isOverconstrained,
+  isUserGestureCancel,
+  looksLikeBluetooth,
+  softMicConstraints,
+  type DisplayMediaOptions,
+} from "./sources";
 
 export type InputKind = "mic" | "tab" | "file" | "none";
 
@@ -19,13 +29,7 @@ export type AudioSnapshot = AudioMetrics & {
 
 const EMPTY_METRICS: AudioMetrics = { peak: 0, rms: 0, low: 0, mid: 0, high: 0 };
 
-export function canUseMicrophone(): boolean {
-  return typeof navigator !== "undefined" && Boolean(navigator.mediaDevices?.getUserMedia);
-}
-
-export function canCaptureTab(): boolean {
-  return typeof navigator !== "undefined" && Boolean(navigator.mediaDevices?.getDisplayMedia);
-}
+export { canUseMicrophone } from "./sources";
 
 export class AudioLab {
   private ctx: AudioContext | null = null;
@@ -40,12 +44,15 @@ export class AudioLab {
 
   kind: InputKind = "none";
   label = "Kein Eingang";
+  deviceId = "";
+  bluetoothLikely = false;
   lastError: string | null = null;
   metrics: AudioMetrics = { ...EMPTY_METRICS };
 
   async ensureGraph(fftSize: FftSize, smoothing: number): Promise<void> {
     if (!this.ctx) {
-      this.ctx = new AudioContext();
+      // playback: music path, not the voice-call / interactive default
+      this.ctx = new AudioContext({ latencyHint: "playback" });
       this.analyser = this.ctx.createAnalyser();
       this.inputGain = this.ctx.createGain();
       this.inputGain.gain.value = 1;
@@ -92,41 +99,29 @@ export class AudioLab {
     return this.snapshot;
   }
 
-  async startMic(fftSize: FftSize, smoothing: number): Promise<void> {
+  async startMic(fftSize: FftSize, smoothing: number, deviceId?: string): Promise<void> {
     if (!canUseMicrophone()) {
       throw new Error("Mikrofon ist in diesem Browser nicht verfügbar.");
     }
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        echoCancellation: false,
-        noiseSuppression: false,
-        autoGainControl: false,
-      },
-      video: false,
-    });
-    await this.connectStream(stream, "mic", "Mikrofon", fftSize, smoothing, false);
+    const stream = await requestMicStream(deviceId);
+    const track = stream.getAudioTracks()[0];
+    const rawLabel = track?.label ?? "Mikrofon";
+    const chosenId = track?.getSettings().deviceId ?? deviceId ?? "";
+    this.deviceId = chosenId;
+    this.bluetoothLikely = looksLikeBluetooth(rawLabel);
+    await this.connectStream(stream, "mic", rawLabel || "Mikrofon", fftSize, smoothing, false);
   }
 
   async startTab(fftSize: FftSize, smoothing: number): Promise<void> {
-    if (!canCaptureTab()) {
+    if (!navigator.mediaDevices?.getDisplayMedia) {
       throw new Error("Tab-/Systemton ist in diesem Browser nicht verfügbar.");
     }
-    const stream = await navigator.mediaDevices.getDisplayMedia({
-      video: { frameRate: 1, width: 16, height: 16 },
-      audio: {
-        echoCancellation: false,
-        noiseSuppression: false,
-        autoGainControl: false,
-        // Chrome uses this extra flag in some versions
-        suppressLocalAudioPlayback: false,
-      } as MediaTrackConstraints,
-    });
-
+    const stream = await requestDisplayStream();
     const audioTracks = stream.getAudioTracks();
     if (audioTracks.length === 0) {
       stream.getTracks().forEach((track) => track.stop());
       throw new Error(
-        "Kein Audio im geteilten Stream. Bitte einen Tab wählen und „Tab-Audio teilen“ aktivieren.",
+        "Kein Audio im geteilten Stream. Im Chrome-Dialog „Tab-Audio teilen“ oder „Systemaudio“ aktivieren.",
       );
     }
 
@@ -137,10 +132,15 @@ export class AudioLab {
       }
     });
 
+    this.deviceId = "";
+    this.bluetoothLikely = false;
     await this.connectStream(stream, "tab", "Tab / System", fftSize, smoothing, false);
   }
 
   async startFile(file: File, fftSize: FftSize, smoothing: number): Promise<void> {
+    if (!file.type.startsWith("audio/") && !isAudioFileName(file.name)) {
+      throw new Error("Das ist keine Audiodatei. MP3, WAV, OGG, M4A, FLAC oder AAC wählen.");
+    }
     await this.ensureGraph(fftSize, smoothing);
     this.detachSource();
 
@@ -184,6 +184,8 @@ export class AudioLab {
     this.objectUrl = url;
     this.kind = "file";
     this.label = file.name;
+    this.deviceId = "";
+    this.bluetoothLikely = false;
     this.lastError = null;
     await el.play();
   }
@@ -192,6 +194,8 @@ export class AudioLab {
     this.detachSource();
     this.kind = "none";
     this.label = "Kein Eingang";
+    this.deviceId = "";
+    this.bluetoothLikely = false;
     this.metrics = { ...EMPTY_METRICS };
   }
 
@@ -235,6 +239,47 @@ export class AudioLab {
       this.objectUrl = null;
     }
   }
+}
+
+async function requestMicStream(deviceId?: string): Promise<MediaStream> {
+  const get = (audio: MediaTrackConstraints) =>
+    navigator.mediaDevices.getUserMedia({ audio, video: false });
+
+  try {
+    return await get(softMicConstraints(deviceId));
+  } catch (error) {
+    if (isUserGestureCancel(error) && !isOverconstrained(error)) {
+      throw error;
+    }
+    try {
+      return await get(fallbackMicConstraints(deviceId));
+    } catch (fallbackError) {
+      if (deviceId) {
+        return await get(fallbackMicConstraints());
+      }
+      throw fallbackError;
+    }
+  }
+}
+
+async function requestDisplayStream(): Promise<MediaStream> {
+  const attempts = displayMediaAttempts();
+  let last: unknown;
+  for (const options of attempts) {
+    try {
+      return await navigator.mediaDevices.getDisplayMedia(options as DisplayMediaOptions);
+    } catch (error) {
+      if (isUserGestureCancel(error)) {
+        throw error;
+      }
+      last = error;
+    }
+  }
+  throw last instanceof Error ? last : new Error("Tab-/Systemton ist nicht verfügbar.");
+}
+
+function isAudioFileName(name: string): boolean {
+  return /\.(mp3|wav|ogg|oga|m4a|flac|aac|opus|webm)$/i.test(name);
 }
 
 function measure(
