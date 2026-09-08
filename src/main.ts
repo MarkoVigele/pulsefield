@@ -1,6 +1,6 @@
 import { AudioLab } from "./audio";
-import { BarsClassic } from "./render";
 import { mountUi } from "./ui";
+import { createVisualizer } from "./viz";
 import "./styles.css";
 
 const root = document.querySelector<HTMLElement>("#app");
@@ -10,10 +10,13 @@ if (!root) {
 
 const lab = new AudioLab();
 const ui = mountUi(root, lab);
-const renderer = new BarsClassic();
+let renderer = createVisualizer(ui.getSettings().preset);
 
 function frame(now: number): void {
   const settings = ui.getSettings();
+  if (renderer.id !== settings.preset) {
+    renderer = createVisualizer(settings.preset);
+  }
   lab.applyTuning(settings.fftSize, settings.smoothing);
   const snap = lab.sample();
   const boosted = {

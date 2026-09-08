@@ -1,13 +1,20 @@
 import { AudioLab } from "./audio";
+import {
+  DENSITY_LABEL,
+  PRESETS,
+  PRESET_HINT,
+  PRESET_LABEL,
+  type PresetId,
+} from "./presets";
 import { isMobileLab } from "./quality";
 import {
   BACKGROUNDS,
   FFT_SIZES,
   PALETTES,
   type Settings,
+  commitSettings,
   loadSettings,
   resetSettings,
-  saveSettings,
 } from "./settings";
 import {
   SCO_HINT,
@@ -55,6 +62,17 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
   const micOk = canUseMicrophone();
   const phone = !tabOk;
 
+  const presetOptions = PRESETS.map(
+    (id) => `<option value="${id}">${PRESET_LABEL[id]}</option>`,
+  ).join("");
+  const presetButtons = PRESETS.map(
+    (id) => `
+      <button type="button" class="preset-btn" data-preset="${id}">
+        <span>${PRESET_LABEL[id]}</span>
+        <small>${PRESET_HINT[id]}</small>
+      </button>`,
+  ).join("");
+
   parent.innerHTML = `
     <canvas id="viz" class="viz" aria-label="Bars Classic Visualizer"></canvas>
     <div class="drop-veil" id="drop-veil" hidden>Audiodatei hier ablegen</div>
@@ -64,7 +82,12 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
           <span class="mark">PF</span>
           <div>
             <strong>Pulsefield</strong>
-            <small id="preset-label">Preset · Bars Classic</small>
+            <label class="preset-inline">
+              <span>Preset</span>
+              <select id="preset-select" aria-label="Preset">
+                ${presetOptions}
+              </select>
+            </label>
           </div>
         </div>
         <div class="meters" aria-hidden="true">
@@ -114,7 +137,7 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
           </button>
           <button type="button" class="dock-btn dock-btn--lab" data-act="sheet" aria-expanded="false" aria-controls="sheet">
             Labor
-            <small>Bars Classic</small>
+            <small id="lab-preset">Bars Classic</small>
           </button>
         </nav>
       </div>
@@ -129,6 +152,13 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
           <button type="button" class="text-btn" data-act="close-sheet">Schließen</button>
         </header>
         <div class="sheet-body">
+          <fieldset class="presets">
+            <legend>Preset</legend>
+            <div class="preset-grid" role="radiogroup" aria-label="Preset">
+              ${presetButtons}
+            </div>
+          </fieldset>
+
           <section class="limits limits--sheet">
             <strong>Eingänge und Grenzen</strong>
             <ul>
@@ -165,7 +195,7 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
             <input type="range" min="0" max="1" step="0.01" data-key="bloom" />
           </label>
           <label class="field">
-            <span>Balken <b id="v-barCount"></b></span>
+            <span><span id="density-label">Balken</span> <b id="v-barCount"></b></span>
             <input type="range" min="8" max="160" step="1" data-key="barCount" />
           </label>
           <label class="field field--row">
@@ -190,7 +220,7 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
               <button type="button" data-quality="medium">Mittel</button>
               <button type="button" data-quality="high">Hoch</button>
             </div>
-            <p class="hint">Platzhalter für spätere Stufen. Mobil startet auf Niedrig.</p>
+            <p class="hint">Niedrig spart Speichen, Partikel und Zellen. Mobil startet auf Niedrig.</p>
           </fieldset>
 
           <button type="button" class="reset" data-act="reset">Auf Standard zurücksetzen</button>
@@ -209,6 +239,7 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
   const sourceLine = must(parent, "#source-line", HTMLElement);
   const devicePick = must(parent, "#device-pick", HTMLLabelElement);
   const deviceSelect = must(parent, "#mic-device", HTMLSelectElement);
+  const presetSelect = must(parent, "#preset-select", HTMLSelectElement);
   const routeHint = must(parent, "#route-hint", HTMLElement);
   const dropVeil = must(parent, "#drop-veil", HTMLElement);
 
@@ -300,16 +331,27 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
     setText(parent, "#v-bloom", settings.bloom.toFixed(2));
     setText(parent, "#v-barCount", String(settings.barCount));
     setText(parent, "#v-speed", settings.speed.toFixed(2));
+    setText(parent, "#density-label", DENSITY_LABEL[settings.preset]);
+    setText(parent, "#lab-preset", PRESET_LABEL[settings.preset]);
+    presetSelect.value = settings.preset;
+    canvas.setAttribute("aria-label", `${PRESET_LABEL[settings.preset]} Visualizer`);
     for (const btn of parent.querySelectorAll<HTMLButtonElement>("[data-quality]")) {
       btn.classList.toggle("is-on", btn.dataset.quality === settings.quality);
+    }
+    for (const btn of parent.querySelectorAll<HTMLButtonElement>("[data-preset]")) {
+      btn.classList.toggle("is-on", btn.dataset.preset === settings.preset);
     }
   };
 
   const persist = (next: Settings) => {
-    settings = next;
-    saveSettings(settings);
+    settings = commitSettings(settings, next);
     lab.applyTuning(settings.fftSize, settings.smoothing);
     syncForm();
+  };
+
+  const choosePreset = (preset: PresetId) => {
+    if (preset === settings.preset) return;
+    persist({ ...settings, preset });
   };
 
   const setSheet = (open: boolean) => {
@@ -328,19 +370,28 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
   };
 
   parent.addEventListener("click", (event) => {
-    const btn = (event.target as HTMLElement).closest<HTMLButtonElement>("[data-act], [data-quality]");
+    const btn = (event.target as HTMLElement).closest<HTMLButtonElement>(
+      "[data-act], [data-quality], [data-preset]",
+    );
     if (!btn) return;
     const act = btn.dataset.act;
     const quality = btn.dataset.quality;
+    const preset = btn.dataset.preset;
     if (quality === "low" || quality === "medium" || quality === "high") {
       persist({ ...settings, quality });
+      return;
+    }
+    if (preset === "bars" || preset === "ring" || preset === "ribbon" || preset === "particles" || preset === "bloom") {
+      choosePreset(preset);
       return;
     }
     if (act === "sheet") setSheet(sheetRoot.hidden);
     if (act === "close-sheet") setSheet(false);
     if (act === "reset") {
-      persist(resetSettings());
-      toast("Labor auf Standard zurückgesetzt.");
+      settings = resetSettings(settings.preset);
+      lab.applyTuning(settings.fftSize, settings.smoothing);
+      syncForm();
+      toast(`Labor auf Standard von ${PRESET_LABEL[settings.preset]} zurückgesetzt.`);
     }
     if (act === "stop") {
       lab.stop();
@@ -371,6 +422,13 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
       syncRouteHint();
       if (lab.kind === "mic" || lab.kind === "none") {
         void startMic();
+      }
+      return;
+    }
+    if (el === presetSelect) {
+      const next = presetSelect.value as PresetId;
+      if (next === "bars" || next === "ring" || next === "ribbon" || next === "particles" || next === "bloom") {
+        choosePreset(next);
       }
       return;
     }

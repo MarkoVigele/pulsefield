@@ -40,6 +40,11 @@ function mix(a: Rgb, b: Rgb, t: number): Rgb {
 }
 
 export function paletteColor(id: PaletteId, t: number, energy = 1): string {
+  const [r, g, bl] = paletteRgb(id, t, energy);
+  return `rgb(${r}, ${g}, ${bl})`;
+}
+
+export function paletteRgb(id: PaletteId, t: number, energy = 1): Rgb {
   const stops = STOPS[id];
   const x = Math.min(1, Math.max(0, t));
   const scaled = x * (stops.length - 1);
@@ -49,7 +54,11 @@ export function paletteColor(id: PaletteId, t: number, energy = 1): string {
   const local = scaled - i;
   const [r, g, bl] = mix(a ?? [255, 255, 255], b ?? [255, 255, 255], local);
   const e = 0.35 + 0.65 * Math.min(1, Math.max(0, energy));
-  return `rgb(${Math.round(r * e)}, ${Math.round(g * e)}, ${Math.round(bl * e)})`;
+  return [Math.round(r * e), Math.round(g * e), Math.round(bl * e)];
+}
+
+export function rgba(rgb: Rgb, alpha: number): string {
+  return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${Math.min(1, Math.max(0, alpha))})`;
 }
 
 export function paletteGlow(id: PaletteId): string {

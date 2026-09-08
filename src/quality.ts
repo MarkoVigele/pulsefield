@@ -17,3 +17,20 @@ export function bloomScaleFor(quality: Quality): number {
   if (quality === "medium") return 0.75;
   return 1;
 }
+
+export function countScaleFor(quality: Quality): number {
+  if (quality === "low") return 0.5;
+  if (quality === "medium") return 0.78;
+  return 1;
+}
+
+export function scaledDensity(base: number, quality: Quality, min: number, max: number): number {
+  const n = Math.round(base * countScaleFor(quality));
+  return Math.min(max, Math.max(min, n));
+}
+
+export function particleBudget(barCount: number, quality: Quality): number {
+  const scale = quality === "low" ? 1.4 : quality === "medium" ? 3.1 : 5.2;
+  const cap = quality === "low" ? 140 : quality === "medium" ? 300 : 480;
+  return Math.round(Math.min(cap, Math.max(36, barCount * scale)));
+}

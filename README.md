@@ -1,6 +1,6 @@
 # Pulsefield
 
-Pulsefield ist unser Browser-Audio-Visualizer für Mobil und Desktop. Wir lesen den Klang im Labor — Mikrofon, Tab/System oder Datei — und zeichnen ihn als **Bars Classic** auf eine Canvas2D-Fläche.
+Pulsefield ist unser Browser-Audio-Visualizer für Mobil und Desktop. Wir lesen den Klang im Labor — Mikrofon, Tab/System oder Datei — und zeichnen ihn auf eine Canvas2D-Fläche. Fünf Presets, ohne Reload umschaltbar.
 
 Live (nach Merge auf `main`): [https://markovigele.github.io/pulsefield/](https://markovigele.github.io/pulsefield/)
 
@@ -44,16 +44,31 @@ Stop trennt den aktuellen Eingang. Einstellungen liegen im **Labor**-Sheet und b
 - **Tab-Audio auf dem Handy** — `getDisplayMedia` liefert dort in der Regel keine nutzbare Audiospur. Deshalb bieten wir Tab/System nur auf dem Desktop an.
 - **Anrufmodus bei Bluetooth-Headset (SCO/HFP)** — Sobald ein Headset-Mikrofon geöffnet wird, legt Android/iOS den Bluetooth-Weg oft auf das Telefonie-Profil. Musik wird dumpf oder wandert. Wir setzen `echoCancellation`, `noiseSuppression`, `autoGainControl` und `voiceIsolation` auf aus und starten den `AudioContext` mit `latencyHint: 'playback'`. Das weicht den Voice-Call-Pfad im Browser, **wenn** der Browser mitspielt. Das Betriebssystem kann SCO trotzdem erzwingen. Workaround: Telefonmikrofon wählen, Headset nur hören — oder eine Datei.
 
+## Presets
+
+Wir schalten ohne Reload. Jedes Preset bringt eigene Labor-Defaults mit. Wer Werte ändert, behält sie beim nächsten Besuch genau dieses Presets. **Auf Standard zurücksetzen** gilt für das aktive Preset (andere Presets behalten ihre Overrides). Qualität bleibt ein globaler Leistungsregler.
+
+| Preset | Was wir zeichnen |
+| --- | --- |
+| **Bars Classic** | Klassisches Spektrum, Peak-Kappen, optional gespiegelt |
+| **Radialring** | Speichen und konzentrische Ringe um die Mitte, Schockwellen auf Transienten |
+| **Wellenband** | Zeitwelle als Band plus Nachzüge |
+| **Partikelfeld** | 2D-Schwarm, Ausbrüche auf Peak/Bass |
+| **Bloomraster** | Leuchtende Zellen, Welle vom Zentrum bei Hits |
+
+Keine 3D-Kugel in diesem Stand — das kommt später.
+
 ## Labor
 
-Im Sheet (unten auf Mobil, rechts auf Desktop):
+Im Sheet (unten auf Mobil, rechts auf Desktop), Preset auch oben im HUD:
 
+- Preset-Wahl (fünf Canvas2D-Felder)
 - Empfindlichkeit, Glättung, FFT-Größe
-- Farbpalette, Bloom/Glow, Balkenanzahl, Spiegeln, Tempo, Hintergrund
-- Qualität Niedrig / Mittel / Hoch (Platzhalter für spätere Stufen)
-- Auf Standard zurücksetzen
+- Farbpalette, Bloom/Glow, Dichte (Balken / Speichen / Segmente / Partikel / Zellen), Spiegeln, Tempo, Hintergrund
+- Qualität Niedrig / Mittel / Hoch — skaliert Auflösung, Glow und Anzahlen
+- Auf Standard zurücksetzen (aktives Preset)
 
-Ein Preset in diesem Stand: **Bars Classic**. Sichtbar reaktiv auf Peak, RMS und Tief/Mitte/Hoch. Weitere Presets kommen später.
+Sichtbar reaktiv auf Peak, RMS und Tief/Mitte/Hoch. Mobil startet auf Qualität Niedrig.
 
 ## GitHub Pages
 
