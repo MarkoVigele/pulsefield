@@ -29,7 +29,7 @@ export class BarsClassic {
     const { width, height } = canvas;
     this.paintBackground(ctx, width, height, settings, snap, now);
 
-    const values = this.envelope(collectBars(snap, settings.barCount), settings);
+    const values = this.envelope(collectBars(snap, settings.barCount, now), settings);
     const count = values.length;
     if (count === 0) return;
 
@@ -197,18 +197,21 @@ export class BarsClassic {
   }
 }
 
-function collectBars(snap: AudioSnapshot, barCount: number): number[] {
+function collectBars(snap: AudioSnapshot, barCount: number, now: number): number[] {
   const freq = snap.frequency;
   const count = Math.max(8, barCount);
   const out = new Array<number>(count).fill(0);
-  if (!freq.length) return out;
-
   const nyquist = snap.sampleRate / 2;
   const minHz = 32;
   const maxHz = Math.min(16000, nyquist);
-  const idle = 0.035;
+  const hasSignal = freq.length > 0;
 
   for (let i = 0; i < count; i += 1) {
+    const breath = 0.05 + 0.04 * Math.abs(Math.sin(now / 700 + i * 0.35));
+    if (!hasSignal) {
+      out[i] = breath;
+      continue;
+    }
     const t0 = i / count;
     const t1 = (i + 1) / count;
     const f0 = minHz * (maxHz / minHz) ** t0;
@@ -222,7 +225,7 @@ function collectBars(snap: AudioSnapshot, barCount: number): number[] {
       n += 1;
     }
     const raw = n ? sum / n / 255 : 0;
-    out[i] = Math.min(1, idle + raw);
+    out[i] = Math.min(1, 0.03 + raw);
   }
   return out;
 }
