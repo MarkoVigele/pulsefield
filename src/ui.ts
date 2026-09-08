@@ -356,7 +356,11 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
         return;
       }
       toast("Chrome-Dialog: Tab oder Bildschirm wählen und „Tab-Audio teilen“ / „Systemaudio“ anhaken.");
-      void runInput(() => lab.startTab(settings.fftSize, settings.smoothing), "Tab-/Systemton verbunden.");
+      void runInput(
+        () => lab.startTab(settings.fftSize, settings.smoothing),
+        "Tab-/Systemton verbunden.",
+        "Teilen abgebrochen oder verweigert.",
+      );
     }
   });
 
@@ -443,21 +447,14 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
     }
   }
 
-  async function runInput(fn: () => Promise<void>, ok: string): Promise<void> {
+  async function runInput(fn: () => Promise<void>, ok: string, denied?: string): Promise<void> {
     try {
       await fn();
       if (!(lab.kind === "mic" && lab.bluetoothLikely)) {
         toast(ok);
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Eingang fehlgeschlagen.";
-      if (message.toLowerCase().includes("denied") || message.toLowerCase().includes("notallowed")) {
-        toast("Zugriff wurde verweigert.");
-      } else if (message.toLowerCase().includes("abort") || message.toLowerCase().includes("cancel")) {
-        toast("Auswahl abgebrochen.");
-      } else {
-        toast(message);
-      }
+      toast(friendlyInputError(error, denied));
     }
     refreshHud();
   }
@@ -476,6 +473,31 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
     toast,
     refreshHud,
   };
+}
+
+function friendlyInputError(error: unknown, denied?: string): string {
+  const name = error instanceof DOMException ? error.name : "";
+  const message = error instanceof Error ? error.message : "Eingang fehlgeschlagen.";
+  const lower = message.toLowerCase();
+  if (name === "AbortError" || lower.includes("abort") || lower.includes("cancel")) {
+    return denied ?? "Auswahl abgebrochen.";
+  }
+  if (name === "NotAllowedError" || lower.includes("denied") || lower.includes("notallowed")) {
+    return denied ?? "Zugriff wurde verweigert.";
+  }
+  if (name === "NotFoundError" || lower.includes("not found") || lower.includes("notfound")) {
+    return "Kein passendes Gerät gefunden.";
+  }
+  if (name === "NotReadableError" || lower.includes("not readable")) {
+    return "Gerät ist belegt oder nicht lesbar.";
+  }
+  if (name === "OverconstrainedError") {
+    return "Dieses Gerät erfüllt die Audio-Anforderungen nicht.";
+  }
+  if (name === "SecurityError") {
+    return "Zugriff blockiert. HTTPS oder localhost nötig.";
+  }
+  return message;
 }
 
 function hasAudioFile(transfer: DataTransfer | null): boolean {
