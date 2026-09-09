@@ -4,9 +4,10 @@ import {
   PRESETS,
   PRESET_HINT,
   PRESET_LABEL,
+  isPreset,
   type PresetId,
 } from "./presets";
-import { isMobileLab } from "./quality";
+import { isMobileLab, type Quality } from "./quality";
 import {
   BACKGROUNDS,
   FFT_SIZES,
@@ -75,13 +76,13 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
   const presetButtons = PRESETS.map(
     (id) => `
       <button type="button" class="preset-btn" data-preset="${id}">
-        <span>${PRESET_LABEL[id]}</span>
+        <span>${PRESET_LABEL[id]}${id === "orb" ? ' <em class="badge">3D</em>' : ""}</span>
         <small>${PRESET_HINT[id]}</small>
       </button>`,
   ).join("");
 
   parent.innerHTML = `
-    <canvas id="viz" class="viz" aria-label="Bars Classic Visualizer"></canvas>
+    <canvas id="viz" class="viz" aria-label="Bars Classic Feld"></canvas>
     <div class="fps-hud" id="fps-hud"${hudPrefs.showFps ? "" : " hidden"}>
       <span id="fps-readout">— fps</span>
     </div>
@@ -205,7 +206,7 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
             </select>
           </label>
           <label class="field">
-            <span>Bloom / Glow <b id="v-bloom"></b></span>
+            <span>Bloom / Leuchten <b id="v-bloom"></b></span>
             <input type="range" min="0" max="1" step="0.01" data-key="bloom" />
           </label>
           <label class="field">
@@ -234,7 +235,10 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
               <button type="button" data-quality="medium">Mittel</button>
               <button type="button" data-quality="high">Hoch</button>
             </div>
-            <p class="hint">Niedrig spart Speichen, Partikel und Zellen. Mobil startet auf Niedrig.</p>
+            <p class="hint" id="quality-hint">Niedrig spart Dichte und Leuchten. Mobil startet auf Niedrig.</p>
+            <p class="hint hint--note" id="orb-note" hidden>
+              Lichtinsel in 3D braucht Qualität Mittel oder Hoch. Auf Niedrig zeichnen wir ein leichtes 2D-Stand-in, damit Mobil nutzbar bleibt.
+            </p>
           </fieldset>
 
           <fieldset class="quality">
@@ -246,7 +250,7 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
               ).join("")}
             </div>
             <label class="field field--row">
-              <span>Anzeige</span>
+              <span>FPS-Anzeige</span>
               <input type="checkbox" id="show-fps" />
             </label>
             <p class="hint">Zeichnen mit höchstens 60 oder 120. Auto folgt dem Display bis 120. Die Ecke zählt echte Frames — ein 60-Hz-Panel bleibt bei 60.</p>
@@ -422,8 +426,13 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
     setText(parent, "#v-speed", settings.speed.toFixed(2));
     setText(parent, "#density-label", DENSITY_LABEL[settings.preset]);
     setText(parent, "#lab-preset", PRESET_LABEL[settings.preset]);
+    setText(parent, "#quality-hint", qualityHintFor(settings.quality, settings.preset));
+    const orbNote = parent.querySelector<HTMLElement>("#orb-note");
+    if (orbNote) {
+      orbNote.hidden = settings.preset !== "orb" || settings.quality !== "low";
+    }
     presetSelect.value = settings.preset;
-    canvas.setAttribute("aria-label", `${PRESET_LABEL[settings.preset]} Visualizer`);
+    canvas.setAttribute("aria-label", `${PRESET_LABEL[settings.preset]} Feld`);
     for (const btn of parent.querySelectorAll<HTMLButtonElement>("[data-quality]")) {
       btn.classList.toggle("is-on", btn.dataset.quality === settings.quality);
     }
@@ -490,7 +499,7 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
       persist({ ...settings, fpsMode });
       return;
     }
-    if (preset === "bars" || preset === "ring" || preset === "ribbon" || preset === "particles" || preset === "bloom") {
+    if (isPreset(preset)) {
       choosePreset(preset);
       return;
     }
@@ -539,8 +548,8 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
       return;
     }
     if (el === presetSelect) {
-      const next = presetSelect.value as PresetId;
-      if (next === "bars" || next === "ring" || next === "ribbon" || next === "particles" || next === "bloom") {
+      const next = presetSelect.value;
+      if (isPreset(next)) {
         choosePreset(next);
       }
       return;
@@ -701,4 +710,23 @@ function must<T extends Element>(root: ParentNode, sel: string, ctor: new () => 
 function setText(root: ParentNode, sel: string, value: string): void {
   const el = root.querySelector(sel);
   if (el) el.textContent = value;
+}
+
+function qualityHintFor(quality: Quality, preset: PresetId): string {
+  if (preset === "orb") {
+    if (quality === "low") {
+      return "Niedrig: 2D-Stand-in, kein Three.js — Mobil bleibt damit nutzbar. Mittel oder Hoch schaltet die weiche 3D-Kugel ein.";
+    }
+    if (quality === "medium") {
+      return "Mittel: 3D an, ohne schweren Bloom-Pass. Weniger Facetten und Punkte als Hoch.";
+    }
+    return "Hoch: volle 3D-Lichtinsel, Bloom-Pass, mehr Facetten und Punkte.";
+  }
+  if (quality === "low") {
+    return "Niedrig: halbe Dichte, schwächeres Leuchten, Auflösung 1×. Mobil startet hier.";
+  }
+  if (quality === "medium") {
+    return "Mittel: mehr Balken, Speichen, Partikel und Zellen, mittleres Leuchten.";
+  }
+  return "Hoch: volle Auflösung, Leuchten und Anzahlen.";
 }

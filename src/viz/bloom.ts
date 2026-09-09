@@ -1,7 +1,7 @@
 import type { AudioSnapshot } from "../audio";
 import { paletteColor, paletteGlow } from "../palettes";
 import type { PresetId } from "../presets";
-import { scaledDensity } from "../quality";
+import { profileFor, scaledDensity } from "../quality";
 import type { Settings } from "../settings";
 import {
   Envelope,
@@ -78,7 +78,7 @@ export class BloomGrid implements Visualizer {
         const th = rh * scale;
         const t = cols <= 1 ? 0 : x / (cols - 1);
 
-        if (bloom > 0.02 && e > 0.12 && settings.quality !== "low") {
+        if (bloom > 0.02 && e > 0.12 && profileFor(settings.quality).shadows) {
           ctx.shadowBlur = 4 + bloom * 26 * e;
           ctx.shadowColor = paletteGlow(settings.palette);
         } else {

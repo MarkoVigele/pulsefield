@@ -6,13 +6,17 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "test": "tsx --test src/settings.test.ts src/loop.test.ts src/agc.test.ts",
+    "test": "tsx --test src/settings.test.ts src/loop.test.ts src/agc.test.ts src/quality.test.ts",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host"
   },
   "devDependencies": {
+    "@types/three": "^0.185.4",
     "tsx": "^4.23.13",
     "typescript": "^5.8.3",
     "vite": "^6.3.5"
+  },
+  "dependencies": {
+    "three": "^0.186.0"
   }
 }

@@ -1,7 +1,7 @@
 import type { AudioSnapshot } from "../audio";
 import { paletteColor, paletteGlow, paletteRgb, rgba } from "../palettes";
 import type { PresetId } from "../presets";
-import { scaledDensity } from "../quality";
+import { profileFor, scaledDensity } from "../quality";
 import type { Settings } from "../settings";
 import { TransientTracker, glowAmount, paintBackground, resizeCanvas, sampleWave } from "./shared";
 import type { Visualizer } from "./types";
@@ -39,7 +39,7 @@ export class WaveformRibbon implements Visualizer {
       samples[i] = snap.time.length ? wave : idle;
     }
 
-    const trailDepth = settings.quality === "low" ? 3 : settings.quality === "medium" ? 5 : 7;
+    const trailDepth = profileFor(settings.quality).trails;
     this.trails.unshift(samples);
     if (this.trails.length > trailDepth) this.trails.length = trailDepth;
 

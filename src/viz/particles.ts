@@ -1,7 +1,7 @@
 import type { AudioSnapshot } from "../audio";
 import { paletteColor, paletteGlow, paletteRgb, rgba } from "../palettes";
 import type { PresetId } from "../presets";
-import { particleBudget } from "../quality";
+import { particleBudget, profileFor } from "../quality";
 import type { Settings } from "../settings";
 import { TransientTracker, collectBars, glowAmount, paintBackground, resizeCanvas } from "./shared";
 import type { Visualizer } from "./types";
@@ -75,7 +75,7 @@ export class ParticleField implements Visualizer {
     }
 
     ctx.save();
-    if (bloom > 0.05 && settings.quality !== "low") {
+    if (bloom > 0.05 && profileFor(settings.quality).shadows) {
       ctx.shadowBlur = 6 + bloom * 16;
       ctx.shadowColor = paletteGlow(settings.palette);
     }
