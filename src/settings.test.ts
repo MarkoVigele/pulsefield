@@ -7,15 +7,21 @@ import {
   DEFAULT_FPS_MODE,
   HUD_STORAGE_KEY,
   LEGACY_STORAGE_KEY,
+  PANEL_STORAGE_KEY,
   STORAGE_KEY,
+  clampPanelPosition,
   commitSettings,
+  defaultPanel,
   defaultSettings,
   hydrateSettings,
   loadHud,
+  loadPanel,
   loadSettings,
   resetSettings,
+  sanitizePanel,
   sanitizeSettings,
   saveHud,
+  savePanel,
 } from "./settings.ts";
 
 beforeEach(() => {
@@ -178,6 +184,24 @@ test("unknown fps mode falls back to 120", () => {
   const settings = sanitizeSettings({ fpsMode: "240", sensitivityAuto: 1 }, defaultSettings("bars", false));
   assert.equal(settings.fpsMode, "120");
   assert.equal(settings.sensitivityAuto, true);
+});
+
+test("settings panel position persists and rejects junk", () => {
+  assert.deepEqual(loadPanel(), defaultPanel());
+  savePanel({ x: 120, y: 40, collapsed: true });
+  assert.deepEqual(loadPanel(), { x: 120, y: 40, collapsed: true });
+  assert.ok(localStorage.getItem(PANEL_STORAGE_KEY));
+  assert.deepEqual(sanitizePanel({ x: "nope", y: 12, collapsed: 1 }), { x: null, y: 12, collapsed: false });
+  assert.deepEqual(sanitizePanel(null), defaultPanel());
+});
+
+test("panel clamp keeps a grab strip on screen", () => {
+  const pos = clampPanelPosition(-400, -20, 360, 480, 390, 700, 8);
+  assert.ok(pos.x + 360 > 8);
+  assert.equal(pos.y, 8);
+  const right = clampPanelPosition(2000, 2000, 360, 80, 390, 700, 8);
+  assert.ok(right.x < 390);
+  assert.ok(right.y < 700);
 });
 
 test("existing v2 store without the new fields gets 120 and Auto off", () => {

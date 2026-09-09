@@ -14,11 +14,14 @@ import {
   FPS_MODES,
   PALETTES,
   type Settings,
+  clampPanelPosition,
   commitSettings,
   loadHud,
+  loadPanel,
   loadSettings,
   resetSettings,
   saveHud,
+  savePanel,
 } from "./settings";
 import {
   SCO_HINT,
@@ -63,6 +66,7 @@ export type UiHandles = {
 export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
   let settings = loadSettings();
   let hudPrefs = loadHud();
+  let panelPrefs = loadPanel();
   let toastTimer = 0;
   let inputs: LabAudioInput[] = [];
   let pickedDeviceId = "";
@@ -99,6 +103,7 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
                 ${presetOptions}
               </select>
             </label>
+            <p class="source-line" id="source-line">Kein Eingang</p>
           </div>
         </div>
         <div class="meters" aria-hidden="true">
@@ -110,25 +115,14 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
         </div>
       </header>
 
-      <div class="source-stack">
-        <p class="source-line" id="source-line">Kein Eingang · Labor bereit</p>
-        <label class="device-pick" id="device-pick" hidden>
+      <div class="source-stack" id="source-stack" hidden>
+        <label class="device-pick" id="device-pick">
           <span>Quellen am Gerät</span>
           <select id="mic-device" aria-label="Mikrofon am Gerät"></select>
         </label>
-        <p class="route-hint" id="route-hint" hidden></p>
       </div>
 
       <div class="floor">
-        <aside class="limits" id="limits" role="note">
-          <strong>Grenzen</strong>
-          <ul>
-            <li>Handy kann Spotify oder Bluetooth-Wiedergabe nicht abfangen. A2DP ist kein Mikrofon.</li>
-            <li>Tab-/System-Audio nur Desktop-Chrome. Im Teilen-Dialog den Haken „Tab-Audio teilen“ / „Systemaudio“ setzen.</li>
-            <li>Bluetooth-Headset kann Anruf-/SCO-Routing auslösen. Der Browser verhindert das nicht zuverlässig.</li>
-          </ul>
-        </aside>
-
         <nav class="dock" aria-label="Eingänge">
           <button type="button" class="dock-btn${phone ? " dock-btn--primary" : ""}" data-act="mic"${micOk ? "" : " disabled"}>
             Mikrofon
@@ -146,23 +140,29 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
             Stop
             <small>Eingang trennen</small>
           </button>
-          <button type="button" class="dock-btn dock-btn--lab" data-act="sheet" aria-expanded="false" aria-controls="sheet">
-            Labor
-            <small id="lab-preset">Bars Classic</small>
+          <button type="button" class="dock-btn dock-btn--settings" data-act="panel" aria-expanded="false" aria-controls="panel">
+            Einstellungen
+            <small id="dock-preset">Bars Classic</small>
           </button>
         </nav>
       </div>
     </div>
 
-    <div class="sheet-root" id="sheet-root" hidden>
-      <button type="button" class="backdrop" data-act="close-sheet" aria-label="Einstellungen schließen"></button>
-      <aside class="sheet" id="sheet" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
-        <div class="sheet-handle" aria-hidden="true"></div>
-        <header class="sheet-head">
-          <h2 id="sheet-title">Labor</h2>
-          <button type="button" class="text-btn" data-act="close-sheet">Schließen</button>
+    <div class="panel-root" id="panel-root" hidden>
+      <aside class="panel" id="panel" role="dialog" aria-modal="false" aria-labelledby="panel-title" tabindex="-1">
+        <header class="panel-head" id="panel-head">
+          <div class="panel-head-copy">
+            <h2 id="panel-title">Einstellungen</h2>
+            <p class="panel-sub" id="panel-sub">Bars Classic</p>
+          </div>
+          <div class="panel-head-actions">
+            <button type="button" class="text-btn" data-act="collapse-panel" id="collapse-panel" aria-controls="panel-body">
+              Zuklappen
+            </button>
+            <button type="button" class="text-btn" data-act="close-panel">Schließen</button>
+          </div>
         </header>
-        <div class="sheet-body">
+        <div class="panel-body" id="panel-body">
           <fieldset class="presets">
             <legend>Preset</legend>
             <div class="preset-grid" role="radiogroup" aria-label="Preset">
@@ -170,16 +170,14 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
             </div>
           </fieldset>
 
-          <section class="limits limits--sheet">
-            <strong>Eingänge und Grenzen</strong>
+          <details class="limits-fold">
+            <summary>Eingänge und Grenzen</summary>
             <ul>
-              <li>Wir listen nur Quellen, die das Gerät selbst als <code>audioinput</code> oder per Datei hergibt. Systemklang nur, wenn der Browser ihn wirklich anbietet (Desktop-Chrome: Tab/System).</li>
-              <li>Spotify über Bluetooth-Lautsprecher ist keine Eingangsquelle. Browser können A2DP-Wiedergabe nicht anzapfen.</li>
-              <li>Tab-Audio: Desktop-Chrome, Teilen-Dialog, Haken „Tab-Audio teilen“ oder „Systemaudio“. Ohne Haken bleibt das Feld still.</li>
-              <li>Mikrofon: nach der Freigabe Gerät wählen. echoCancellation, noiseSuppression, autoGainControl und voiceIsolation stehen auf aus — der Anrufmodus kann das Betriebssystem trotzdem erzwingen, sobald ein Bluetooth-Headset als Mic dient.</li>
-              <li>Datei: MP3, WAV, OGG, M4A, FLAC, AAC. Button, Dateidialog oder Datei auf das Feld ziehen.</li>
+              <li>Nur Mikrofone vom Gerät und Dateien. Tab/System nur Desktop-Chrome — im Teilen-Dialog den Haken „Audio teilen“ setzen.</li>
+              <li>Bluetooth-Wiedergabe (Spotify, A2DP) ist kein Eingang. Der Browser kann sie nicht anzapfen.</li>
+              <li>Headset-Mikrofon kann den Anrufmodus (SCO) erzwingen. Dann Telefonmikrofon wählen oder eine Datei nehmen.</li>
             </ul>
-          </section>
+          </details>
 
           <div class="field">
             <span>Empfindlichkeit <b id="v-sensitivity"></b></span>
@@ -267,13 +265,15 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
 
   const canvas = must(parent, "#viz", HTMLCanvasElement);
   const fileInput = must(parent, "#file", HTMLInputElement);
-  const sheetRoot = must(parent, "#sheet-root", HTMLElement);
+  const panelRoot = must(parent, "#panel-root", HTMLElement);
+  const panel = must(parent, "#panel", HTMLElement);
+  const panelHead = must(parent, "#panel-head", HTMLElement);
+  const collapseBtn = must(parent, "#collapse-panel", HTMLButtonElement);
   const toastEl = must(parent, "#toast", HTMLElement);
   const sourceLine = must(parent, "#source-line", HTMLElement);
-  const devicePick = must(parent, "#device-pick", HTMLLabelElement);
+  const sourceStack = must(parent, "#source-stack", HTMLElement);
   const deviceSelect = must(parent, "#mic-device", HTMLSelectElement);
   const presetSelect = must(parent, "#preset-select", HTMLSelectElement);
-  const routeHint = must(parent, "#route-hint", HTMLElement);
   const dropVeil = must(parent, "#drop-veil", HTMLElement);
   const fpsHud = must(parent, "#fps-hud", HTMLElement);
   const fpsReadout = must(parent, "#fps-readout", HTMLElement);
@@ -299,13 +299,10 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
     }, 4800);
   };
 
-  const selectedInput = (): LabAudioInput | undefined =>
-    inputs.find((item) => item.deviceId === pickedDeviceId) ?? inputs[0];
-
   const paintDevices = () => {
     const named = inputs.filter((item) => item.deviceId);
     const visible = named.some((item) => item.rawLabel.length > 0);
-    devicePick.hidden = !visible;
+    sourceStack.hidden = !visible;
     if (!visible) return;
 
     const current = pickedDeviceId || lab.deviceId;
@@ -322,20 +319,6 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
     } else {
       pickedDeviceId = named[0]?.deviceId ?? "";
       if (pickedDeviceId) deviceSelect.value = pickedDeviceId;
-    }
-    syncRouteHint();
-  };
-
-  const syncRouteHint = () => {
-    const choice = selectedInput();
-    const fromLab = lab.kind === "mic" && lab.bluetoothLikely;
-    const fromPick = Boolean(choice?.bluetoothLikely || choice?.communications);
-    if (fromLab || fromPick) {
-      routeHint.hidden = false;
-      routeHint.textContent = SCO_HINT;
-    } else {
-      routeHint.hidden = true;
-      routeHint.textContent = "";
     }
   };
 
@@ -379,7 +362,6 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
       sourceLine.textContent = text;
       lastSource = text;
     }
-    syncRouteHint();
   };
 
   const refreshHud = () => {
@@ -425,7 +407,8 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
     setText(parent, "#v-barCount", String(settings.barCount));
     setText(parent, "#v-speed", settings.speed.toFixed(2));
     setText(parent, "#density-label", DENSITY_LABEL[settings.preset]);
-    setText(parent, "#lab-preset", PRESET_LABEL[settings.preset]);
+    setText(parent, "#dock-preset", PRESET_LABEL[settings.preset]);
+    setText(parent, "#panel-sub", PRESET_LABEL[settings.preset]);
     setText(parent, "#quality-hint", qualityHintFor(settings.quality, settings.preset));
     const orbNote = parent.querySelector<HTMLElement>("#orb-note");
     if (orbNote) {
@@ -467,12 +450,97 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
     persist({ ...settings, preset });
   };
 
-  const setSheet = (open: boolean) => {
-    sheetRoot.hidden = !open;
-    document.body.classList.toggle("sheet-open", open);
-    const toggle = parent.querySelector("[data-act=sheet]");
-    toggle?.setAttribute("aria-expanded", String(open));
+  const applyPanelBox = (x: number, y: number, persist: boolean) => {
+    const pos = clampPanelPosition(
+      x,
+      y,
+      panel.offsetWidth,
+      panel.offsetHeight,
+      window.innerWidth,
+      window.innerHeight,
+    );
+    panel.style.left = `${pos.x}px`;
+    panel.style.top = `${pos.y}px`;
+    panel.style.right = "auto";
+    panel.style.bottom = "auto";
+    if (persist) {
+      panelPrefs = { ...panelPrefs, x: pos.x, y: pos.y };
+      savePanel(panelPrefs);
+    }
   };
+
+  const placePanel = (persistDefault = false) => {
+    if (panelRoot.hidden) return;
+    const savedX = panelPrefs.x;
+    const savedY = panelPrefs.y;
+    if (savedX == null || savedY == null) {
+      const pad = 12;
+      applyPanelBox(window.innerWidth - panel.offsetWidth - pad, pad, persistDefault);
+      return;
+    }
+    applyPanelBox(savedX, savedY, false);
+  };
+
+  const applyCollapsed = (collapsed: boolean, persist = true) => {
+    panelPrefs = { ...panelPrefs, collapsed };
+    panel.classList.toggle("is-collapsed", collapsed);
+    collapseBtn.setAttribute("aria-expanded", String(!collapsed));
+    collapseBtn.textContent = collapsed ? "Aufklappen" : "Zuklappen";
+    if (persist) savePanel(panelPrefs);
+    placePanel();
+  };
+
+  const setPanel = (open: boolean) => {
+    panelRoot.hidden = !open;
+    const toggle = parent.querySelector("[data-act=panel]");
+    toggle?.setAttribute("aria-expanded", String(open));
+    if (!open) return;
+    applyCollapsed(panelPrefs.collapsed, false);
+    placePanel();
+    panel.focus({ preventScroll: true });
+  };
+
+  let dragging = false;
+  let dragDx = 0;
+  let dragDy = 0;
+
+  panelHead.addEventListener("pointerdown", (event) => {
+    if ((event.target as HTMLElement).closest("button")) return;
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    event.preventDefault();
+    dragging = true;
+    panelHead.setPointerCapture(event.pointerId);
+    const rect = panel.getBoundingClientRect();
+    dragDx = event.clientX - rect.left;
+    dragDy = event.clientY - rect.top;
+    panel.classList.add("is-dragging");
+  });
+
+  panelHead.addEventListener("pointermove", (event) => {
+    if (!dragging) return;
+    applyPanelBox(event.clientX - dragDx, event.clientY - dragDy, false);
+  });
+
+  const endDrag = () => {
+    if (!dragging) return;
+    dragging = false;
+    panel.classList.remove("is-dragging");
+    const rect = panel.getBoundingClientRect();
+    applyPanelBox(rect.left, rect.top, true);
+  };
+
+  panelHead.addEventListener("pointerup", endDrag);
+  panelHead.addEventListener("pointercancel", endDrag);
+
+  window.addEventListener("resize", () => {
+    placePanel();
+  });
+
+  window.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !panelRoot.hidden) {
+      setPanel(false);
+    }
+  });
 
   const openFile = () => {
     fileInput.click();
@@ -507,13 +575,14 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
       persist({ ...settings, sensitivityAuto: !settings.sensitivityAuto });
       return;
     }
-    if (act === "sheet") setSheet(sheetRoot.hidden);
-    if (act === "close-sheet") setSheet(false);
+    if (act === "panel") setPanel(panelRoot.hidden);
+    if (act === "close-panel") setPanel(false);
+    if (act === "collapse-panel") applyCollapsed(!panelPrefs.collapsed);
     if (act === "reset") {
       settings = resetSettings(settings.preset);
       lab.applyTuning(settings.fftSize, settings.smoothing);
       syncForm();
-      toast(`Labor auf Standard von ${PRESET_LABEL[settings.preset]} zurückgesetzt.`);
+      toast(`Einstellungen auf Standard von ${PRESET_LABEL[settings.preset]} zurückgesetzt.`);
     }
     if (act === "stop") {
       lab.stop();
@@ -541,7 +610,6 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
     const el = event.target as HTMLInputElement | HTMLSelectElement;
     if (el === deviceSelect) {
       pickedDeviceId = deviceSelect.value;
-      syncRouteHint();
       if (lab.kind === "mic" || lab.kind === "none") {
         void startMic();
       }
