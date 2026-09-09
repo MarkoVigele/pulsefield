@@ -284,3 +284,62 @@ export function saveHud(prefs: HudPrefs): void {
   localStorage.setItem(HUD_STORAGE_KEY, JSON.stringify(prefs));
 }
 
+export const PANEL_STORAGE_KEY = "pulsefield.panel.v1";
+
+export type PanelPrefs = {
+  x: number | null;
+  y: number | null;
+  collapsed: boolean;
+};
+
+export function defaultPanel(): PanelPrefs {
+  return { x: null, y: null, collapsed: false };
+}
+
+export function sanitizePanel(raw: unknown): PanelPrefs {
+  const src = raw && typeof raw === "object" ? (raw as Partial<PanelPrefs>) : {};
+  const x = Number(src.x);
+  const y = Number(src.y);
+  return {
+    x: Number.isFinite(x) ? x : null,
+    y: Number.isFinite(y) ? y : null,
+    collapsed: src.collapsed === true,
+  };
+}
+
+export function loadPanel(): PanelPrefs {
+  try {
+    const raw = localStorage.getItem(PANEL_STORAGE_KEY);
+    if (!raw) return defaultPanel();
+    return sanitizePanel(JSON.parse(raw));
+  } catch {
+    return defaultPanel();
+  }
+}
+
+export function savePanel(prefs: PanelPrefs): void {
+  localStorage.setItem(PANEL_STORAGE_KEY, JSON.stringify(sanitizePanel(prefs)));
+}
+
+/** Keep the header grab-able; allow the body to sit partly off-screen. */
+export function clampPanelPosition(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  viewW: number,
+  viewH: number,
+  pad = 8,
+): { x: number; y: number } {
+  const minVisibleX = Math.min(72, Math.max(1, width));
+  const minVisibleY = Math.min(44, Math.max(1, height));
+  const minX = pad - Math.max(0, width - minVisibleX);
+  const minY = pad;
+  const maxX = Math.max(pad, viewW - minVisibleX);
+  const maxY = Math.max(pad, viewH - minVisibleY);
+  return {
+    x: Math.min(maxX, Math.max(minX, x)),
+    y: Math.min(maxY, Math.max(minY, y)),
+  };
+}
+

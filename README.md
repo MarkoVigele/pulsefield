@@ -36,7 +36,7 @@ Wir nehmen nur Quellen, die das Gerät oder der Browser wirklich hergeben. Keine
 | **Tab / System** | `getDisplayMedia` plus Audio, `systemAudio: 'include'` wo der Browser das kennt | **Nur Desktop-Chrome.** Im Teilen-Dialog Tab oder Bildschirm wählen **und** den Haken „Tab-Audio teilen“ / „Systemaudio“ setzen. Ohne Haken bleibt das Feld still. Auf dem Handy ist der Knopf sichtbar, aber deaktiviert (Nur Desktop). |
 | **Datei** | Audio-Upload oder Datei auf das Feld ziehen | Der verlässliche Weg auf dem Handy, wenn der Raumton nicht passt. MP3, WAV, OGG, M4A, FLAC, AAC. Läuft in Schleife. |
 
-Stop trennt den aktuellen Eingang. Einstellungen liegen im **Labor**-Sheet und bleiben in `localStorage`.
+Stop trennt den aktuellen Eingang. Das Fenster **Einstellungen** liegt über dem Feld (ziehen, zuklappen) und bleibt in `localStorage`.
 
 ### Was der Browser nicht kann
 
@@ -46,7 +46,7 @@ Stop trennt den aktuellen Eingang. Einstellungen liegen im **Labor**-Sheet und b
 
 ## Presets
 
-Wir schalten ohne Reload. Jedes Preset bringt eigene Labor-Defaults mit. Wer Werte ändert, behält sie beim nächsten Besuch genau dieses Presets. **Auf Standard zurücksetzen** gilt für das aktive Preset (andere Presets behalten ihre Overrides). Qualität bleibt ein globaler Leistungsregler.
+Wir schalten ohne Reload. Jedes Preset bringt eigene Defaults mit. Wer Werte ändert, behält sie beim nächsten Besuch genau dieses Presets. **Auf Standard zurücksetzen** gilt für das aktive Preset (andere Presets behalten ihre Overrides). Qualität bleibt ein globaler Leistungsregler.
 
 | Preset | Was wir zeichnen |
 | --- | --- |
@@ -59,22 +59,23 @@ Wir schalten ohne Reload. Jedes Preset bringt eigene Labor-Defaults mit. Wer Wer
 
 Lichtinsel braucht für echtes 3D Qualität **Mittel** oder **Hoch**. Niedrig bleibt bei der 2D-Variante — wir wollen auf dem Handy keine 3D-Last bei ~30 fps.
 
-## Labor
+## Einstellungen
 
-Im Sheet (unten auf Mobil, rechts auf Desktop), Preset auch oben im HUD:
+Schwebendes Fenster über dem Feld — nicht als Vollbild-Sheet. Am Kopf ziehen, zuklappen oder schließen. Lage und Klappzustand bleiben im Speicher. Preset auch oben im HUD:
 
 - Preset-Wahl (fünf Canvas2D-Felder plus Lichtinsel)
 - Empfindlichkeit (Regler oder Auto am Pegel), Glättung, FFT-Größe
 - Farbpalette, Bloom/Leuchten, Dichte (Balken / Speichen / Segmente / Partikel / Zellen / Facetten), Spiegeln, Tempo, Hintergrund
 - Qualität Niedrig / Mittel / Hoch — skaliert Auflösung (DPR), Leuchten, Anzahlen und schaltet 3D frei
 - Bildrate 60 / 120 / Auto (Standard 120), Anzeige in der Ecke (Standard an)
+- Eingänge und Grenzen (zugeklappt, kurzer Hinweis)
 - Auf Standard zurücksetzen (aktives Preset)
 
-Sichtbar reaktiv auf Peak, RMS und Tief/Mitte/Hoch. Mobil startet auf Qualität Niedrig. HiDPI folgt der Qualität (Niedrig 1×, Mittel bis 1.5×, Hoch bis 2.5×). Das Sheet und die Leisten halten Abstand zur Notch (`safe-area`).
+Sichtbar reaktiv auf Peak, RMS und Tief/Mitte/Hoch. Mobil startet auf Qualität Niedrig. HiDPI folgt der Qualität (Niedrig 1×, Mittel bis 1.5×, Hoch bis 2.5×). Fenster und Leisten halten Abstand zur Notch (`safe-area`).
 
 ## Bildrate
 
-Die Zeichenschleife hängt an `requestAnimationFrame` (vsync). Im Labor gibt es drei Modi:
+Die Zeichenschleife hängt an `requestAnimationFrame` (vsync). Unter Einstellungen gibt es drei Modi:
 
 | Modus | Verhalten |
 | --- | --- |
