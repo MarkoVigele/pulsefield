@@ -481,6 +481,35 @@ body {
   min-height: 28px;
 }
 
+.field input[type="range"]:disabled {
+  opacity: 0.45;
+}
+
+.field-with-mode {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+}
+
+.mode-btn {
+  appearance: none;
+  min-height: 36px;
+  min-width: 64px;
+  padding: 0 12px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: #111822;
+  color: var(--text);
+  font: 500 13px/1 var(--font);
+}
+
+.mode-btn.is-on {
+  background: var(--accent-dim);
+  border-color: rgba(62, 224, 195, 0.4);
+  color: var(--accent);
+}
+
 .presets,
 .quality {
   border: 1px solid var(--line);

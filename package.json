@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "test": "tsx --test src/settings.test.ts src/loop.test.ts",
+    "test": "tsx --test src/settings.test.ts src/loop.test.ts src/agc.test.ts",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --host"
   },

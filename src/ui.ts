@@ -10,6 +10,7 @@ import { isMobileLab } from "./quality";
 import {
   BACKGROUNDS,
   FFT_SIZES,
+  FPS_MODES,
   PALETTES,
   type Settings,
   commitSettings,
@@ -55,6 +56,7 @@ export type UiHandles = {
   refreshHud: () => void;
   refreshMeters: () => void;
   setFps: (label: string) => void;
+  paintSensitivity: (gain: number, auto: boolean) => void;
 };
 
 export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
@@ -178,10 +180,14 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
             </ul>
           </section>
 
-          <label class="field">
+          <div class="field">
             <span>Empfindlichkeit <b id="v-sensitivity"></b></span>
-            <input type="range" min="0.2" max="3" step="0.05" data-key="sensitivity" />
-          </label>
+            <div class="field-with-mode">
+              <input type="range" min="0.2" max="3" step="0.05" data-key="sensitivity" id="sensitivity-slider" aria-label="Empfindlichkeit" />
+              <button type="button" class="mode-btn" data-act="sensitivity-auto" aria-pressed="false">Auto</button>
+            </div>
+          </div>
+          <p class="hint" id="sensitivity-hint">Regler von Hand. Auto folgt dem Pegel: leise anheben, laut zurücknehmen.</p>
           <label class="field">
             <span>Glättung <b id="v-smoothing"></b></span>
             <input type="range" min="0" max="0.95" step="0.01" data-key="smoothing" />
@@ -231,11 +237,20 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
             <p class="hint">Niedrig spart Speichen, Partikel und Zellen. Mobil startet auf Niedrig.</p>
           </fieldset>
 
-          <label class="field field--row">
-            <span>Bildrate</span>
-            <input type="checkbox" id="show-fps" />
-          </label>
-          <p class="hint">Ecke oben rechts. Gemessene Frames, Ziel 60.</p>
+          <fieldset class="quality">
+            <legend>Bildrate</legend>
+            <div class="seg" role="radiogroup" aria-label="Bildrate">
+              ${FPS_MODES.map(
+                (mode) =>
+                  `<button type="button" data-fps="${mode}">${mode === "auto" ? "Auto" : mode}</button>`,
+              ).join("")}
+            </div>
+            <label class="field field--row">
+              <span>Anzeige</span>
+              <input type="checkbox" id="show-fps" />
+            </label>
+            <p class="hint">Zeichnen mit höchstens 60 oder 120. Auto folgt dem Display bis 120. Die Ecke zählt echte Frames — ein 60-Hz-Panel bleibt bei 60.</p>
+          </fieldset>
 
           <button type="button" class="reset" data-act="reset">Auf Standard zurücksetzen</button>
         </div>
@@ -259,6 +274,8 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
   const fpsHud = must(parent, "#fps-hud", HTMLElement);
   const fpsReadout = must(parent, "#fps-readout", HTMLElement);
   const showFpsInput = must(parent, "#show-fps", HTMLInputElement);
+  const sensitivitySlider = must(parent, "#sensitivity-slider", HTMLInputElement);
+  const sensitivityAutoBtn = must(parent, "[data-act=sensitivity-auto]", HTMLButtonElement);
   const peakEl = must(parent, "#m-peak", HTMLElement);
   const rmsEl = must(parent, "#m-rms", HTMLElement);
   const lowEl = must(parent, "#b-low", HTMLElement);
@@ -372,6 +389,15 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
     fpsReadout.textContent = label;
   };
 
+  let lastSensText = "";
+  const paintSensitivity = (gain: number, auto: boolean) => {
+    const text = auto ? `${gain.toFixed(2)} · Auto` : gain.toFixed(2);
+    if (text !== lastSensText) {
+      lastSensText = text;
+      setText(parent, "#v-sensitivity", text);
+    }
+  };
+
   const applyHud = (next: typeof hudPrefs) => {
     hudPrefs = next;
     saveHud(hudPrefs);
@@ -389,7 +415,7 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
         input.value = String(value);
       }
     }
-    setText(parent, "#v-sensitivity", settings.sensitivity.toFixed(2));
+    paintSensitivity(settings.sensitivity, settings.sensitivityAuto);
     setText(parent, "#v-smoothing", settings.smoothing.toFixed(2));
     setText(parent, "#v-bloom", settings.bloom.toFixed(2));
     setText(parent, "#v-barCount", String(settings.barCount));
@@ -404,6 +430,19 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
     for (const btn of parent.querySelectorAll<HTMLButtonElement>("[data-preset]")) {
       btn.classList.toggle("is-on", btn.dataset.preset === settings.preset);
     }
+    for (const btn of parent.querySelectorAll<HTMLButtonElement>("[data-fps]")) {
+      btn.classList.toggle("is-on", btn.dataset.fps === settings.fpsMode);
+    }
+    sensitivitySlider.disabled = settings.sensitivityAuto;
+    sensitivityAutoBtn.classList.toggle("is-on", settings.sensitivityAuto);
+    sensitivityAutoBtn.setAttribute("aria-pressed", String(settings.sensitivityAuto));
+    setText(
+      parent,
+      "#sensitivity-hint",
+      settings.sensitivityAuto
+        ? "Auto aktiv — leise anheben, laut zurücknehmen. Der Regler bleibt die manuelle Reserve."
+        : "Regler von Hand. Auto folgt dem Pegel: leise anheben, laut zurücknehmen.",
+    );
     showFpsInput.checked = hudPrefs.showFps;
     fpsHud.hidden = !hudPrefs.showFps;
   };
@@ -436,18 +475,27 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
 
   parent.addEventListener("click", (event) => {
     const btn = (event.target as HTMLElement).closest<HTMLButtonElement>(
-      "[data-act], [data-quality], [data-preset]",
+      "[data-act], [data-quality], [data-preset], [data-fps]",
     );
     if (!btn) return;
     const act = btn.dataset.act;
     const quality = btn.dataset.quality;
     const preset = btn.dataset.preset;
+    const fpsMode = btn.dataset.fps;
     if (quality === "low" || quality === "medium" || quality === "high") {
       persist({ ...settings, quality });
       return;
     }
+    if (fpsMode === "60" || fpsMode === "120" || fpsMode === "auto") {
+      persist({ ...settings, fpsMode });
+      return;
+    }
     if (preset === "bars" || preset === "ring" || preset === "ribbon" || preset === "particles" || preset === "bloom") {
       choosePreset(preset);
+      return;
+    }
+    if (act === "sensitivity-auto") {
+      persist({ ...settings, sensitivityAuto: !settings.sensitivityAuto });
       return;
     }
     if (act === "sheet") setSheet(sheetRoot.hidden);
@@ -601,6 +649,7 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
     refreshHud,
     refreshMeters,
     setFps,
+    paintSensitivity,
   };
 }
 
