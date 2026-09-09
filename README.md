@@ -63,17 +63,29 @@ Keine 3D-Kugel in diesem Stand — das kommt später.
 Im Sheet (unten auf Mobil, rechts auf Desktop), Preset auch oben im HUD:
 
 - Preset-Wahl (fünf Canvas2D-Felder)
-- Empfindlichkeit, Glättung, FFT-Größe
+- Empfindlichkeit (Regler oder Auto am Pegel), Glättung, FFT-Größe
 - Farbpalette, Bloom/Glow, Dichte (Balken / Speichen / Segmente / Partikel / Zellen), Spiegeln, Tempo, Hintergrund
 - Qualität Niedrig / Mittel / Hoch — skaliert Auflösung, Glow und Anzahlen
-- Bildrate-Anzeige (Standard an), Ziel 60 fps
+- Bildrate 60 / 120 / Auto (Standard 120), Anzeige in der Ecke (Standard an)
 - Auf Standard zurücksetzen (aktives Preset)
 
 Sichtbar reaktiv auf Peak, RMS und Tief/Mitte/Hoch. Mobil startet auf Qualität Niedrig.
 
 ## Bildrate
 
-Die Zeichenschleife hängt an `requestAnimationFrame` (vsync) und gibt **höchstens 60** Frames pro Sekunde aus. Ein festes 60 ist im Browser nur so gut wie der vsync des Geräts: 120-Hz-Displays werden auf 60 gedeckelt; wenn das System im Leerlauf auf 30 drosselt, erfinden wir keine Frames. Halten auf dem Bildschirm kann den vsync wachhalten — das Overlay zählt nur wirklich gezeichnete Frames.
+Die Zeichenschleife hängt an `requestAnimationFrame` (vsync). Im Labor gibt es drei Modi:
+
+| Modus | Verhalten |
+| --- | --- |
+| **60** | Höchstens 60 Zeichnungen pro Sekunde |
+| **120** | Höchstens 120 — Standard. Auf einem 60-Hz-Panel bleibt vsync bei 60 |
+| **Auto** | Folgt der Display-Auffrischung, gedeckelt bei 120 |
+
+Wir erfinden keine Frames: die Anzeige oben rechts zählt nur wirklich gezeichnete Durchläufe. Wenn das System im Leerlauf auf 30 drosselt, steht dort 30.
+
+## Empfindlichkeit Auto
+
+Der Regler bleibt die manuelle Empfindlichkeit. **Auto** liest RMS und Peak (Pegel) und passt die wirksame Empfindlichkeit nach: leises Signal wird angehoben, laute Stellen werden zurückgenommen (schnell nach unten, langsam nach oben). Ohne Signal halten wir den letzten sinnvollen Wert, statt auf Maximum zu gehen. Auto schreibt den Regler nicht um — ausgeschaltet gilt wieder der gespeicherte Handwert.
 
 ## GitHub Pages
 

@@ -1,3 +1,4 @@
+import { DEFAULT_FPS_MODE, isFpsMode, type FpsMode } from "./loop";
 import {
   PRESETS,
   isPreset,
@@ -7,6 +8,9 @@ import {
   type Tune,
 } from "./presets";
 import { isMobileLab, type Quality } from "./quality";
+
+export type { FpsMode } from "./loop";
+export { DEFAULT_FPS_MODE, FPS_MODES, isFpsMode } from "./loop";
 
 export const FFT_SIZES = [256, 512, 1024, 2048, 4096] as const;
 export type FftSize = (typeof FFT_SIZES)[number];
@@ -20,6 +24,8 @@ export type BackgroundId = (typeof BACKGROUNDS)[number];
 export type Settings = Tune & {
   preset: PresetId;
   quality: Quality;
+  fpsMode: FpsMode;
+  sensitivityAuto: boolean;
 };
 
 export const STORAGE_KEY = "pulsefield.settings.v2";
@@ -29,6 +35,8 @@ type StoreV2 = {
   v: 2;
   preset: PresetId;
   quality: Quality;
+  fpsMode: FpsMode;
+  sensitivityAuto: boolean;
   overrides: Partial<Record<PresetId, Partial<Tune>>>;
 };
 
@@ -41,6 +49,8 @@ export function defaultSettings(preset: PresetId = "bars", mobile = isMobileLab(
     ...presetDefaults(preset, mobile),
     preset,
     quality: defaultQuality(mobile),
+    fpsMode: DEFAULT_FPS_MODE,
+    sensitivityAuto: false,
   };
 }
 
@@ -87,6 +97,8 @@ export function sanitizeSettings(raw: unknown, fallback = defaultSettings()): Se
     ...sanitizeTune(src, fallback),
     preset,
     quality,
+    fpsMode: isFpsMode(src.fpsMode) ? src.fpsMode : fallback.fpsMode,
+    sensitivityAuto: Boolean(src.sensitivityAuto ?? fallback.sensitivityAuto),
   };
 }
 
@@ -95,6 +107,7 @@ export function hydrateSettings(
   quality: Quality,
   override?: Partial<Tune>,
   mobile = isMobileLab(),
+  extras: { fpsMode?: FpsMode; sensitivityAuto?: boolean } = {},
 ): Settings {
   const base = presetDefaults(preset, mobile);
   return sanitizeSettings({
@@ -102,6 +115,8 @@ export function hydrateSettings(
     ...override,
     preset,
     quality,
+    fpsMode: extras.fpsMode ?? DEFAULT_FPS_MODE,
+    sensitivityAuto: extras.sensitivityAuto ?? false,
   });
 }
 
@@ -110,6 +125,8 @@ function emptyStore(): StoreV2 {
     v: 2,
     preset: "bars",
     quality: defaultQuality(),
+    fpsMode: DEFAULT_FPS_MODE,
+    sensitivityAuto: false,
     overrides: {},
   };
 }
@@ -120,6 +137,8 @@ function sanitizeStore(raw: unknown): StoreV2 {
   if (src.v === 2) {
     const preset = isPreset(src.preset) ? src.preset : "bars";
     const quality = isQuality(src.quality) ? src.quality : defaultQuality();
+    const fpsMode = isFpsMode(src.fpsMode) ? src.fpsMode : DEFAULT_FPS_MODE;
+    const sensitivityAuto = Boolean(src.sensitivityAuto);
     const overrides: StoreV2["overrides"] = {};
     const incoming = src.overrides && typeof src.overrides === "object" ? src.overrides : {};
     for (const id of PRESETS) {
@@ -128,13 +147,15 @@ function sanitizeStore(raw: unknown): StoreV2 {
         overrides[id] = sanitizeTune(entry, presetDefaults(id));
       }
     }
-    return { v: 2, preset, quality, overrides };
+    return { v: 2, preset, quality, fpsMode, sensitivityAuto, overrides };
   }
   const legacy = sanitizeSettings(src, defaultSettings("bars"));
   return {
     v: 2,
     preset: "bars",
     quality: legacy.quality,
+    fpsMode: legacy.fpsMode,
+    sensitivityAuto: legacy.sensitivityAuto,
     overrides: { bars: pickTune(legacy) },
   };
 }
@@ -165,15 +186,21 @@ export function saveStore(store: StoreV2): void {
   }
 }
 
+function extrasFrom(store: StoreV2): { fpsMode: FpsMode; sensitivityAuto: boolean } {
+  return { fpsMode: store.fpsMode, sensitivityAuto: store.sensitivityAuto };
+}
+
 export function loadSettings(): Settings {
   const store = loadStore();
-  return hydrateSettings(store.preset, store.quality, store.overrides[store.preset]);
+  return hydrateSettings(store.preset, store.quality, store.overrides[store.preset], isMobileLab(), extrasFrom(store));
 }
 
 export function saveSettings(settings: Settings): void {
   const store = loadStore();
   store.preset = settings.preset;
   store.quality = settings.quality;
+  store.fpsMode = isFpsMode(settings.fpsMode) ? settings.fpsMode : DEFAULT_FPS_MODE;
+  store.sensitivityAuto = Boolean(settings.sensitivityAuto);
   store.overrides[settings.preset] = pickTune(settings);
   saveStore(store);
 }
@@ -181,15 +208,23 @@ export function saveSettings(settings: Settings): void {
 export function commitSettings(prev: Settings, next: Settings): Settings {
   const store = loadStore();
   store.quality = next.quality;
+  store.fpsMode = isFpsMode(next.fpsMode) ? next.fpsMode : store.fpsMode;
+  store.sensitivityAuto = Boolean(next.sensitivityAuto);
 
   if (next.preset !== prev.preset) {
     const preset = isPreset(next.preset) ? next.preset : "bars";
     store.preset = preset;
     saveStore(store);
-    return hydrateSettings(preset, store.quality, store.overrides[preset]);
+    return hydrateSettings(preset, store.quality, store.overrides[preset], isMobileLab(), extrasFrom(store));
   }
 
-  const sanitized = sanitizeSettings({ ...next, quality: store.quality, preset: prev.preset });
+  const sanitized = sanitizeSettings({
+    ...next,
+    quality: store.quality,
+    fpsMode: store.fpsMode,
+    sensitivityAuto: store.sensitivityAuto,
+    preset: prev.preset,
+  });
   if (!tuneEqualsSafe(pickTune(prev), pickTune(sanitized))) {
     store.overrides[prev.preset] = pickTune(sanitized);
   }
@@ -218,8 +253,10 @@ export function resetSettings(preset?: PresetId): Settings {
   delete store.overrides[active];
   store.preset = active;
   store.quality = defaultQuality();
+  store.fpsMode = DEFAULT_FPS_MODE;
+  store.sensitivityAuto = false;
   saveStore(store);
-  return hydrateSettings(active, store.quality);
+  return hydrateSettings(active, store.quality, undefined, isMobileLab(), extrasFrom(store));
 }
 
 export const HUD_STORAGE_KEY = "pulsefield.hud.v1";

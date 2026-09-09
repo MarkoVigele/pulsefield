@@ -4,8 +4,10 @@ import { beforeEach, test } from "node:test";
 import { PRESET_LABEL, PRESETS, presetDefaults } from "./presets.ts";
 import { particleBudget, scaledDensity } from "./quality.ts";
 import {
+  DEFAULT_FPS_MODE,
   HUD_STORAGE_KEY,
   LEGACY_STORAGE_KEY,
+  STORAGE_KEY,
   commitSettings,
   defaultSettings,
   hydrateSettings,
@@ -123,4 +125,59 @@ test("FPS overlay defaults on and persists separately from presets", () => {
   let state = defaultSettings("bars", false);
   state = commitSettings(state, { ...state, bloom: 0.4 });
   assert.equal(loadHud().showFps, false);
+});
+
+test("Bildrate defaults to 120 and Empfindlichkeit Auto stays off", () => {
+  const settings = defaultSettings("bars", false);
+  assert.equal(settings.fpsMode, "120");
+  assert.equal(settings.fpsMode, DEFAULT_FPS_MODE);
+  assert.equal(settings.sensitivityAuto, false);
+});
+
+test("fps mode and Auto persist across preset switches", () => {
+  let state = defaultSettings("bars", false);
+  state = commitSettings(state, { ...state, fpsMode: "60", sensitivityAuto: true });
+  assert.equal(state.fpsMode, "60");
+  assert.equal(state.sensitivityAuto, true);
+
+  state = commitSettings(state, { ...state, preset: "ring" });
+  assert.equal(state.preset, "ring");
+  assert.equal(state.fpsMode, "60");
+  assert.equal(state.sensitivityAuto, true);
+
+  const reloaded = loadSettings();
+  assert.equal(reloaded.fpsMode, "60");
+  assert.equal(reloaded.sensitivityAuto, true);
+});
+
+test("reset restores 120 and turns Auto off without dropping other preset overrides", () => {
+  let state = defaultSettings("bars", false);
+  state = commitSettings(state, { ...state, bloom: 0.9, fpsMode: "auto", sensitivityAuto: true });
+  state = resetSettings("bars");
+  assert.equal(state.fpsMode, "120");
+  assert.equal(state.sensitivityAuto, false);
+  assert.equal(state.bloom, presetDefaults("bars", false).bloom);
+});
+
+test("unknown fps mode falls back to 120", () => {
+  const settings = sanitizeSettings({ fpsMode: "240", sensitivityAuto: 1 }, defaultSettings("bars", false));
+  assert.equal(settings.fpsMode, "120");
+  assert.equal(settings.sensitivityAuto, true);
+});
+
+test("existing v2 store without the new fields gets 120 and Auto off", () => {
+  localStorage.setItem(
+    STORAGE_KEY,
+    JSON.stringify({
+      v: 2,
+      preset: "ribbon",
+      quality: "high",
+      overrides: { ribbon: { palette: "mono" } },
+    }),
+  );
+  const loaded = loadSettings();
+  assert.equal(loaded.preset, "ribbon");
+  assert.equal(loaded.palette, "mono");
+  assert.equal(loaded.fpsMode, "120");
+  assert.equal(loaded.sensitivityAuto, false);
 });
