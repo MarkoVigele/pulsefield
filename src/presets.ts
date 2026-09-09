@@ -1,7 +1,7 @@
 import { isMobileLab } from "./quality";
 import type { BackgroundId, FftSize, PaletteId, Settings } from "./settings";
 
-export const PRESETS = ["bars", "ring", "ribbon", "particles", "bloom"] as const;
+export const PRESETS = ["bars", "ring", "ribbon", "particles", "bloom", "orb"] as const;
 export type PresetId = (typeof PRESETS)[number];
 
 export type Tune = {
@@ -22,6 +22,7 @@ export const PRESET_LABEL: Record<PresetId, string> = {
   ribbon: "Wellenband",
   particles: "Partikelfeld",
   bloom: "Bloomraster",
+  orb: "Lichtinsel",
 };
 
 export const PRESET_HINT: Record<PresetId, string> = {
@@ -30,6 +31,7 @@ export const PRESET_HINT: Record<PresetId, string> = {
   ribbon: "Zeitwelle als Band",
   particles: "Schwarm aus Transienten",
   bloom: "Leuchtendes Zellenraster",
+  orb: "Weiche 3D-Kugel",
 };
 
 export const DENSITY_LABEL: Record<PresetId, string> = {
@@ -38,6 +40,7 @@ export const DENSITY_LABEL: Record<PresetId, string> = {
   ribbon: "Segmente",
   particles: "Partikel",
   bloom: "Zellen",
+  orb: "Facetten",
 };
 
 export const TUNE_KEYS = [
@@ -133,6 +136,17 @@ export function presetDefaults(preset: PresetId, mobile = isMobileLab()): Tune {
         background: "grid",
         sensitivity: mobile ? 1.35 : 1.25,
         smoothing: 0.75,
+      };
+    case "orb":
+      return {
+        ...shared,
+        palette: "plasma",
+        bloom: mobile ? 0.45 : 0.8,
+        barCount: mobile ? 36 : 64,
+        speed: 0.8,
+        background: "void",
+        sensitivity: mobile ? 1.4 : 1.25,
+        smoothing: 0.7,
       };
     default:
       return shared;

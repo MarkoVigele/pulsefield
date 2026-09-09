@@ -27,6 +27,15 @@ function watchBox(canvas: HTMLCanvasElement): void {
   ro.observe(canvas);
 }
 
+export function canvasCssSize(canvas: HTMLCanvasElement): CanvasBox {
+  if (typeof ResizeObserver === "undefined") {
+    const rect = canvas.getBoundingClientRect();
+    return { w: rect.width, h: rect.height };
+  }
+  watchBox(canvas);
+  return readBox(canvas);
+}
+
 export function resizeCanvas(
   canvas: HTMLCanvasElement,
   quality: Settings["quality"],

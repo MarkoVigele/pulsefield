@@ -22,13 +22,14 @@ beforeEach(() => {
   resetMemoryStorage();
 });
 
-test("five presets have German or established lab names", () => {
-  assert.deepEqual([...PRESETS], ["bars", "ring", "ribbon", "particles", "bloom"]);
+test("six presets have German or established lab names", () => {
+  assert.deepEqual([...PRESETS], ["bars", "ring", "ribbon", "particles", "bloom", "orb"]);
   assert.equal(PRESET_LABEL.bars, "Bars Classic");
   assert.equal(PRESET_LABEL.ring, "Radialring");
   assert.equal(PRESET_LABEL.ribbon, "Wellenband");
   assert.equal(PRESET_LABEL.particles, "Partikelfeld");
   assert.equal(PRESET_LABEL.bloom, "Bloomraster");
+  assert.equal(PRESET_LABEL.orb, "Lichtinsel");
 });
 
 test("each preset ships distinct defaults", () => {
@@ -37,11 +38,14 @@ test("each preset ships distinct defaults", () => {
   const ribbon = presetDefaults("ribbon", false);
   const particles = presetDefaults("particles", false);
   const bloom = presetDefaults("bloom", false);
+  const orb = presetDefaults("orb", false);
   assert.notEqual(bars.palette, ring.palette);
   assert.notEqual(ribbon.background, particles.background);
   assert.notEqual(bloom.bloom, bars.bloom);
   assert.equal(ring.mirror, true);
   assert.equal(particles.palette, "ember");
+  assert.equal(orb.palette, "plasma");
+  assert.equal(orb.background, "void");
 });
 
 test("hydrate uses preset defaults when no override exists", () => {
@@ -107,8 +111,19 @@ test("legacy v1 settings migrate onto Bars Classic", () => {
 });
 
 test("unknown preset falls back to bars", () => {
-  const settings = sanitizeSettings({ preset: "orb", quality: "medium" }, defaultSettings("bars", false));
+  const settings = sanitizeSettings({ preset: "kugel", quality: "medium" }, defaultSettings("bars", false));
   assert.equal(settings.preset, "bars");
+});
+
+test("Lichtinsel persists as sixth preset", () => {
+  let state = defaultSettings("orb", false);
+  assert.equal(state.preset, "orb");
+  assert.equal(state.palette, presetDefaults("orb", false).palette);
+  state = commitSettings(state, { ...state, bloom: 0.88 });
+  state = commitSettings(state, { ...state, preset: "bars" });
+  state = commitSettings(state, { ...state, preset: "orb" });
+  assert.equal(state.preset, "orb");
+  assert.equal(state.bloom, 0.88);
 });
 
 test("quality scales density and particle budget", () => {

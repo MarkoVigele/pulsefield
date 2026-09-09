@@ -13,6 +13,7 @@ if (!root) {
 const lab = new AudioLab();
 const ui = mountUi(root, lab);
 let renderer = createVisualizer(ui.getSettings().preset);
+renderer.mount?.({ root: ui.root, canvas: ui.canvas });
 let binScratch = new Uint8Array(0);
 const pace = createPace(performance.now(), ui.getSettings().fpsMode);
 const agc = createAgc(ui.getSettings().sensitivity);
@@ -29,7 +30,9 @@ function frame(now: number): void {
   lastNow = now;
 
   if (renderer.id !== settings.preset) {
+    renderer.dispose?.();
     renderer = createVisualizer(settings.preset);
+    renderer.mount?.({ root: ui.root, canvas: ui.canvas });
   }
   lab.applyTuning(settings.fftSize, settings.smoothing);
   const snap = lab.sample();
