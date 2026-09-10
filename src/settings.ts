@@ -321,6 +321,24 @@ export function savePanel(prefs: PanelPrefs): void {
   localStorage.setItem(PANEL_STORAGE_KEY, JSON.stringify(sanitizePanel(prefs)));
 }
 
+export type SafeInsets = {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+};
+
+export const EMPTY_INSETS: SafeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
+
+export function sanitizeInsets(raw: unknown): SafeInsets {
+  const src = raw && typeof raw === "object" ? (raw as Partial<SafeInsets>) : {};
+  const n = (value: unknown) => {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+  };
+  return { top: n(src.top), right: n(src.right), bottom: n(src.bottom), left: n(src.left) };
+}
+
 /** Keep the header grab-able; allow the body to sit partly off-screen. */
 export function clampPanelPosition(
   x: number,
@@ -330,16 +348,61 @@ export function clampPanelPosition(
   viewW: number,
   viewH: number,
   pad = 8,
+  insets: SafeInsets = EMPTY_INSETS,
 ): { x: number; y: number } {
+  const safe = sanitizeInsets(insets);
   const minVisibleX = Math.min(72, Math.max(1, width));
   const minVisibleY = Math.min(44, Math.max(1, height));
-  const minX = pad - Math.max(0, width - minVisibleX);
-  const minY = pad;
-  const maxX = Math.max(pad, viewW - minVisibleX);
-  const maxY = Math.max(pad, viewH - minVisibleY);
+  const minX = safe.left + pad - Math.max(0, width - minVisibleX);
+  const minY = safe.top + pad;
+  const maxX = Math.max(safe.left + pad, viewW - safe.right - minVisibleX);
+  const maxY = Math.max(safe.top + pad, viewH - safe.bottom - minVisibleY);
   return {
     x: Math.min(maxX, Math.max(minX, x)),
     y: Math.min(maxY, Math.max(minY, y)),
   };
+}
+
+export const ONBOARD_STORAGE_KEY = "pulsefield.onboard.v1";
+
+export type OnboardPrefs = {
+  seen: boolean;
+};
+
+export function defaultOnboard(): OnboardPrefs {
+  return { seen: false };
+}
+
+export function sanitizeOnboard(raw: unknown): OnboardPrefs {
+  const src = raw && typeof raw === "object" ? (raw as Partial<OnboardPrefs>) : {};
+  return { seen: src.seen === true };
+}
+
+export function loadOnboard(): OnboardPrefs {
+  try {
+    const raw = localStorage.getItem(ONBOARD_STORAGE_KEY);
+    if (raw) return sanitizeOnboard(JSON.parse(raw));
+    if (localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY)) {
+      return { seen: true };
+    }
+    return defaultOnboard();
+  } catch {
+    return defaultOnboard();
+  }
+}
+
+export function saveOnboard(prefs: OnboardPrefs): void {
+  localStorage.setItem(ONBOARD_STORAGE_KEY, JSON.stringify(sanitizeOnboard(prefs)));
+}
+
+export function shouldShowOnboard(seen: boolean, kind: string): boolean {
+  return !seen && kind === "none";
+}
+
+export function sourceHudText(kind: string, label: string): string {
+  if (kind === "tab") return "Tab / System";
+  if (kind === "file") return label.trim() || "Datei";
+  if (kind === "mic") return label.trim() || "Mikrofon";
+  return "Kein Eingang";
 }
 

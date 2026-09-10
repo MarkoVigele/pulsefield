@@ -7,21 +7,26 @@ import {
   isPreset,
   type PresetId,
 } from "./presets";
-import { isMobileLab, type Quality } from "./quality";
+import { type Quality } from "./quality";
 import {
   BACKGROUNDS,
   FFT_SIZES,
   FPS_MODES,
   PALETTES,
+  type SafeInsets,
   type Settings,
   clampPanelPosition,
   commitSettings,
   loadHud,
+  loadOnboard,
   loadPanel,
   loadSettings,
   resetSettings,
   saveHud,
+  saveOnboard,
   savePanel,
+  shouldShowOnboard,
+  sourceHudText,
 } from "./settings";
 import {
   SCO_HINT,
@@ -48,6 +53,7 @@ const BG_LABEL: Record<(typeof BACKGROUNDS)[number], string> = {
 };
 
 const FILE_ACCEPT = "audio/*,.mp3,.wav,.ogg,.oga,.m4a,.flac,.aac,.opus,.webm";
+const DRAG_SLOP = 4;
 
 export type UiHandles = {
   root: HTMLElement;
@@ -67,6 +73,7 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
   let settings = loadSettings();
   let hudPrefs = loadHud();
   let panelPrefs = loadPanel();
+  let onboard = loadOnboard();
   let toastTimer = 0;
   let inputs: LabAudioInput[] = [];
   let pickedDeviceId = "";
@@ -74,10 +81,7 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
   const micOk = canUseMicrophone();
   const phone = !tabOk;
 
-  const presetOptions = PRESETS.map(
-    (id) => `<option value="${id}">${PRESET_LABEL[id]}</option>`,
-  ).join("");
-  const presetButtons = PRESETS.map(
+  const presetCards = PRESETS.map(
     (id) => `
       <button type="button" class="preset-btn" data-preset="${id}">
         <span>${PRESET_LABEL[id]}${id === "orb" ? ' <em class="badge">3D</em>' : ""}</span>
@@ -87,24 +91,18 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
 
   parent.innerHTML = `
     <canvas id="viz" class="viz" aria-label="Bars Classic Feld"></canvas>
-    <div class="fps-hud" id="fps-hud"${hudPrefs.showFps ? "" : " hidden"}>
-      <span id="fps-readout">— fps</span>
-    </div>
     <div class="drop-veil" id="drop-veil" hidden>Audiodatei hier ablegen</div>
     <div class="chrome">
-      <header class="hud">
-        <div class="brand">
-          <span class="mark">PF</span>
-          <div>
-            <strong>Pulsefield</strong>
-            <label class="preset-inline">
-              <span>Preset</span>
-              <select id="preset-select" aria-label="Preset">
-                ${presetOptions}
-              </select>
-            </label>
-            <p class="source-line" id="source-line">Kein Eingang</p>
-          </div>
+      <header class="hud" aria-label="Status">
+        <span class="mark">PF</span>
+        <div class="hud-status">
+          <span class="hud-chip" id="fps-hud"${hudPrefs.showFps ? "" : " hidden"}>
+            <span id="fps-readout">— fps</span>
+          </span>
+          <span class="hud-chip" id="source-line">Kein Eingang</span>
+          <button type="button" class="hud-chip hud-chip--btn" id="preset-chip" data-act="presets" aria-haspopup="dialog" aria-controls="preset-switch" aria-expanded="false">
+            Bars Classic
+          </button>
         </div>
         <div class="meters" aria-hidden="true">
           <span data-meter="peak">PK <b id="m-peak">0.00</b></span>
@@ -115,14 +113,28 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
         </div>
       </header>
 
-      <div class="source-stack" id="source-stack" hidden>
-        <label class="device-pick" id="device-pick">
-          <span>Quellen am Gerät</span>
-          <select id="mic-device" aria-label="Mikrofon am Gerät"></select>
-        </label>
-      </div>
+      <section class="first-run" id="first-run" hidden role="dialog" aria-labelledby="first-run-title">
+        <p class="first-run-kicker">Eingang</p>
+        <h1 id="first-run-title">Quelle wählen</h1>
+        <p class="first-run-copy">Mikrofon, Datei oder Tab. Ohne Quelle bleibt das Feld still.</p>
+        <div class="first-run-grid">
+          <button type="button" class="start-btn${phone ? " start-btn--primary" : ""}" data-act="mic"${micOk ? "" : " disabled"}>
+            Mikrofon
+            <small>${micOk ? "Raumton vom Gerät" : "Nicht verfügbar"}</small>
+          </button>
+          <button type="button" class="start-btn${phone ? " start-btn--primary" : ""}" data-act="file">
+            Datei
+            <small>MP3, WAV, OGG · vom Gerät</small>
+          </button>
+          <button type="button" class="start-btn${tabOk ? " start-btn--primary" : ""}" data-act="tab"${tabOk ? "" : " disabled"} title="${tabOk ? "Chrome-Dialog: Audio teilen aktivieren" : "Nur Desktop-Chrome"}">
+            Tab / System
+            <small>${tabOk ? "Haken „Audio teilen“" : "Nur Desktop"}</small>
+          </button>
+        </div>
+        <button type="button" class="text-btn first-run-skip" data-act="skip-onboard">Feld zuerst ansehen</button>
+      </section>
 
-      <div class="floor">
+      <div class="floor" id="floor" hidden>
         <nav class="dock" aria-label="Eingänge">
           <button type="button" class="dock-btn${phone ? " dock-btn--primary" : ""}" data-act="mic"${micOk ? "" : " disabled"}>
             Mikrofon
@@ -148,9 +160,22 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
       </div>
     </div>
 
+    <div class="preset-switch" id="preset-switch" hidden>
+      <div class="preset-switch-card" role="dialog" aria-modal="true" aria-labelledby="preset-switch-title">
+        <header class="preset-switch-head">
+          <h2 id="preset-switch-title">Preset</h2>
+          <button type="button" class="text-btn" data-act="close-presets">Schließen</button>
+        </header>
+        <div class="preset-grid preset-grid--big" role="radiogroup" aria-label="Preset">
+          ${presetCards}
+        </div>
+      </div>
+    </div>
+
     <div class="panel-root" id="panel-root" hidden>
       <aside class="panel" id="panel" role="dialog" aria-modal="false" aria-labelledby="panel-title" tabindex="-1">
         <header class="panel-head" id="panel-head">
+          <span class="panel-grip" aria-hidden="true"><i></i><i></i></span>
           <div class="panel-head-copy">
             <h2 id="panel-title">Einstellungen</h2>
             <p class="panel-sub" id="panel-sub">Bars Classic</p>
@@ -163,98 +188,120 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
           </div>
         </header>
         <div class="panel-body" id="panel-body">
-          <fieldset class="presets">
-            <legend>Preset</legend>
-            <div class="preset-grid" role="radiogroup" aria-label="Preset">
-              ${presetButtons}
-            </div>
-          </fieldset>
+          <button type="button" class="preset-launch" data-act="presets">
+            <span>Preset</span>
+            <strong id="panel-preset">Bars Classic</strong>
+            <small>Umschalter öffnen</small>
+          </button>
 
-          <details class="limits-fold">
-            <summary>Eingänge und Grenzen</summary>
-            <ul>
-              <li>Nur Mikrofone vom Gerät und Dateien. Tab/System nur Desktop-Chrome — im Teilen-Dialog den Haken „Audio teilen“ setzen.</li>
-              <li>Bluetooth-Wiedergabe (Spotify, A2DP) ist kein Eingang. Der Browser kann sie nicht anzapfen.</li>
-              <li>Headset-Mikrofon kann den Anrufmodus (SCO) erzwingen. Dann Telefonmikrofon wählen oder eine Datei nehmen.</li>
-            </ul>
+          <details class="group" open>
+            <summary>Quelle</summary>
+            <div class="group-body">
+              <div class="field">
+                <span>Empfindlichkeit <b id="v-sensitivity"></b></span>
+                <div class="field-with-mode">
+                  <input type="range" min="0.2" max="3" step="0.05" data-key="sensitivity" id="sensitivity-slider" aria-label="Empfindlichkeit" />
+                  <button type="button" class="mode-btn" data-act="sensitivity-auto" aria-pressed="false">Auto</button>
+                </div>
+              </div>
+              <p class="hint" id="sensitivity-hint">Regler von Hand. Auto folgt dem Pegel: leise anheben, laut zurücknehmen.</p>
+              <label class="field" id="device-pick" hidden>
+                <span>Quellen am Gerät</span>
+                <select id="mic-device" aria-label="Mikrofon am Gerät"></select>
+              </label>
+            </div>
           </details>
 
-          <div class="field">
-            <span>Empfindlichkeit <b id="v-sensitivity"></b></span>
-            <div class="field-with-mode">
-              <input type="range" min="0.2" max="3" step="0.05" data-key="sensitivity" id="sensitivity-slider" aria-label="Empfindlichkeit" />
-              <button type="button" class="mode-btn" data-act="sensitivity-auto" aria-pressed="false">Auto</button>
+          <details class="group" open>
+            <summary>Look</summary>
+            <div class="group-body">
+              <label class="field">
+                <span>Farbpalette</span>
+                <select data-key="palette">
+                  ${PALETTES.map((id) => `<option value="${id}">${PALETTE_LABEL[id]}</option>`).join("")}
+                </select>
+              </label>
+              <label class="field">
+                <span>Bloom / Leuchten <b id="v-bloom"></b></span>
+                <input type="range" min="0" max="1" step="0.01" data-key="bloom" />
+              </label>
+              <label class="field">
+                <span><span id="density-label">Balken</span> <b id="v-barCount"></b></span>
+                <input type="range" min="8" max="160" step="1" data-key="barCount" />
+              </label>
+              <label class="field field--row">
+                <span>Spiegeln</span>
+                <input type="checkbox" data-key="mirror" />
+              </label>
+              <label class="field">
+                <span>Hintergrund</span>
+                <select data-key="background">
+                  ${BACKGROUNDS.map((id) => `<option value="${id}">${BG_LABEL[id]}</option>`).join("")}
+                </select>
+              </label>
             </div>
-          </div>
-          <p class="hint" id="sensitivity-hint">Regler von Hand. Auto folgt dem Pegel: leise anheben, laut zurücknehmen.</p>
-          <label class="field">
-            <span>Glättung <b id="v-smoothing"></b></span>
-            <input type="range" min="0" max="0.95" step="0.01" data-key="smoothing" />
-          </label>
-          <label class="field">
-            <span>FFT-Größe</span>
-            <select data-key="fftSize">
-              ${FFT_SIZES.map((n) => `<option value="${n}">${n}</option>`).join("")}
-            </select>
-          </label>
-          <label class="field">
-            <span>Farbpalette</span>
-            <select data-key="palette">
-              ${PALETTES.map((id) => `<option value="${id}">${PALETTE_LABEL[id]}</option>`).join("")}
-            </select>
-          </label>
-          <label class="field">
-            <span>Bloom / Leuchten <b id="v-bloom"></b></span>
-            <input type="range" min="0" max="1" step="0.01" data-key="bloom" />
-          </label>
-          <label class="field">
-            <span><span id="density-label">Balken</span> <b id="v-barCount"></b></span>
-            <input type="range" min="8" max="160" step="1" data-key="barCount" />
-          </label>
-          <label class="field field--row">
-            <span>Spiegeln</span>
-            <input type="checkbox" data-key="mirror" />
-          </label>
-          <label class="field">
-            <span>Tempo <b id="v-speed"></b></span>
-            <input type="range" min="0.25" max="2.5" step="0.05" data-key="speed" />
-          </label>
-          <label class="field">
-            <span>Hintergrund</span>
-            <select data-key="background">
-              ${BACKGROUNDS.map((id) => `<option value="${id}">${BG_LABEL[id]}</option>`).join("")}
-            </select>
-          </label>
+          </details>
 
-          <fieldset class="quality">
-            <legend>Qualität</legend>
-            <div class="seg" role="radiogroup" aria-label="Qualität">
-              <button type="button" data-quality="low">Niedrig</button>
-              <button type="button" data-quality="medium">Mittel</button>
-              <button type="button" data-quality="high">Hoch</button>
+          <details class="group" open>
+            <summary>Tempo</summary>
+            <div class="group-body">
+              <label class="field">
+                <span>Tempo <b id="v-speed"></b></span>
+                <input type="range" min="0.25" max="2.5" step="0.05" data-key="speed" />
+              </label>
+              <label class="field">
+                <span>Glättung <b id="v-smoothing"></b></span>
+                <input type="range" min="0" max="0.95" step="0.01" data-key="smoothing" />
+              </label>
             </div>
-            <p class="hint" id="quality-hint">Niedrig spart Dichte und Leuchten. Mobil startet auf Niedrig.</p>
-            <p class="hint hint--note" id="orb-note" hidden>
-              Lichtinsel in 3D braucht Qualität Mittel oder Hoch. Auf Niedrig zeichnen wir ein leichtes 2D-Stand-in, damit Mobil nutzbar bleibt.
-            </p>
-          </fieldset>
+          </details>
 
-          <fieldset class="quality">
-            <legend>Bildrate</legend>
-            <div class="seg" role="radiogroup" aria-label="Bildrate">
-              ${FPS_MODES.map(
-                (mode) =>
-                  `<button type="button" data-fps="${mode}">${mode === "auto" ? "Auto" : mode}</button>`,
-              ).join("")}
+          <details class="group" open>
+            <summary>Qualität</summary>
+            <div class="group-body">
+              <div class="seg" role="radiogroup" aria-label="Qualität">
+                <button type="button" data-quality="low">Niedrig</button>
+                <button type="button" data-quality="medium">Mittel</button>
+                <button type="button" data-quality="high">Hoch</button>
+              </div>
+              <p class="hint" id="quality-hint">Niedrig spart Dichte und Leuchten. Mobil startet auf Niedrig.</p>
+              <p class="hint hint--note" id="orb-note" hidden>
+                Lichtinsel in 3D braucht Qualität Mittel oder Hoch. Auf Niedrig zeichnen wir ein leichtes 2D-Stand-in, damit Mobil nutzbar bleibt.
+              </p>
+              <div class="seg" role="radiogroup" aria-label="Bildrate">
+                ${FPS_MODES.map(
+                  (mode) =>
+                    `<button type="button" data-fps="${mode}">${mode === "auto" ? "Auto" : mode}</button>`,
+                ).join("")}
+              </div>
+              <label class="field field--row">
+                <span>FPS-Anzeige</span>
+                <input type="checkbox" id="show-fps" />
+              </label>
+              <p class="hint">Zeichnen mit höchstens 60 oder 120. Auto folgt dem Display bis 120. Der FPS-Chip zählt echte Frames — ein 60-Hz-Panel bleibt bei 60.</p>
             </div>
-            <label class="field field--row">
-              <span>FPS-Anzeige</span>
-              <input type="checkbox" id="show-fps" />
-            </label>
-            <p class="hint">Zeichnen mit höchstens 60 oder 120. Auto folgt dem Display bis 120. Die Ecke zählt echte Frames — ein 60-Hz-Panel bleibt bei 60.</p>
-          </fieldset>
+          </details>
 
-          <button type="button" class="reset" data-act="reset">Auf Standard zurücksetzen</button>
+          <details class="group">
+            <summary>Mehr</summary>
+            <div class="group-body">
+              <label class="field">
+                <span>FFT-Größe</span>
+                <select data-key="fftSize">
+                  ${FFT_SIZES.map((n) => `<option value="${n}">${n}</option>`).join("")}
+                </select>
+              </label>
+              <details class="limits-fold">
+                <summary>Eingänge und Grenzen</summary>
+                <ul>
+                  <li>Nur Mikrofone vom Gerät und Dateien. Tab/System nur Desktop-Chrome — im Teilen-Dialog den Haken „Audio teilen“ setzen.</li>
+                  <li>Bluetooth-Wiedergabe (Spotify, A2DP) ist kein Eingang. Der Browser kann sie nicht anzapfen.</li>
+                  <li>Headset-Mikrofon kann den Anrufmodus (SCO) erzwingen. Dann Telefonmikrofon wählen oder eine Datei nehmen.</li>
+                </ul>
+              </details>
+              <button type="button" class="reset" data-act="reset">Auf Standard zurücksetzen</button>
+            </div>
+          </details>
         </div>
       </aside>
     </div>
@@ -271,9 +318,12 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
   const collapseBtn = must(parent, "#collapse-panel", HTMLButtonElement);
   const toastEl = must(parent, "#toast", HTMLElement);
   const sourceLine = must(parent, "#source-line", HTMLElement);
-  const sourceStack = must(parent, "#source-stack", HTMLElement);
+  const devicePick = must(parent, "#device-pick", HTMLElement);
   const deviceSelect = must(parent, "#mic-device", HTMLSelectElement);
-  const presetSelect = must(parent, "#preset-select", HTMLSelectElement);
+  const presetChip = must(parent, "#preset-chip", HTMLButtonElement);
+  const presetSwitch = must(parent, "#preset-switch", HTMLElement);
+  const firstRun = must(parent, "#first-run", HTMLElement);
+  const floor = must(parent, "#floor", HTMLElement);
   const dropVeil = must(parent, "#drop-veil", HTMLElement);
   const fpsHud = must(parent, "#fps-hud", HTMLElement);
   const fpsReadout = must(parent, "#fps-readout", HTMLElement);
@@ -302,7 +352,7 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
   const paintDevices = () => {
     const named = inputs.filter((item) => item.deviceId);
     const visible = named.some((item) => item.rawLabel.length > 0);
-    sourceStack.hidden = !visible;
+    devicePick.hidden = !visible;
     if (!visible) return;
 
     const current = pickedDeviceId || lab.deviceId;
@@ -354,19 +404,19 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
   };
 
   const refreshSource = () => {
-    const idle = lab.kind === "none";
-    const mobileNote = isMobileLab() && idle ? " · Mobil: Qualität Niedrig" : "";
-    const idleHint = idle ? " · Mic, Datei oder Tab (Desktop)" : "";
-    const text = `${lab.label}${idle && lab.label === "Kein Eingang" ? idleHint : ""}${mobileNote}`;
+    const text = sourceHudText(lab.kind, lab.label);
     if (text !== lastSource) {
       sourceLine.textContent = text;
+      sourceLine.title = text;
       lastSource = text;
     }
+    sourceLine.classList.toggle("is-idle", lab.kind === "none");
   };
 
   const refreshHud = () => {
     refreshMeters();
     refreshSource();
+    paintChrome();
   };
 
   const setFps = (label: string) => {
@@ -391,6 +441,24 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
     showFpsInput.checked = hudPrefs.showFps;
   };
 
+  const paintChrome = () => {
+    const show = shouldShowOnboard(onboard.seen, lab.kind);
+    firstRun.hidden = !show;
+    floor.hidden = show;
+    parent.classList.toggle("is-onboard", show);
+    parent.classList.toggle("has-dock", !show);
+  };
+
+  const markOnboardSeen = () => {
+    if (onboard.seen) {
+      paintChrome();
+      return;
+    }
+    onboard = { seen: true };
+    saveOnboard(onboard);
+    paintChrome();
+  };
+
   const syncForm = () => {
     for (const input of parent.querySelectorAll<HTMLInputElement | HTMLSelectElement>("[data-key]")) {
       const key = input.dataset.key as keyof Settings;
@@ -409,12 +477,13 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
     setText(parent, "#density-label", DENSITY_LABEL[settings.preset]);
     setText(parent, "#dock-preset", PRESET_LABEL[settings.preset]);
     setText(parent, "#panel-sub", PRESET_LABEL[settings.preset]);
+    setText(parent, "#panel-preset", PRESET_LABEL[settings.preset]);
     setText(parent, "#quality-hint", qualityHintFor(settings.quality, settings.preset));
     const orbNote = parent.querySelector<HTMLElement>("#orb-note");
     if (orbNote) {
       orbNote.hidden = settings.preset !== "orb" || settings.quality !== "low";
     }
-    presetSelect.value = settings.preset;
+    presetChip.textContent = PRESET_LABEL[settings.preset];
     canvas.setAttribute("aria-label", `${PRESET_LABEL[settings.preset]} Feld`);
     for (const btn of parent.querySelectorAll<HTMLButtonElement>("[data-quality]")) {
       btn.classList.toggle("is-on", btn.dataset.quality === settings.quality);
@@ -450,7 +519,26 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
     persist({ ...settings, preset });
   };
 
-  const applyPanelBox = (x: number, y: number, persist: boolean) => {
+  const setPresetSwitch = (open: boolean) => {
+    presetSwitch.hidden = !open;
+    presetChip.setAttribute("aria-expanded", String(open));
+    parent.classList.toggle("has-presets", open);
+    if (open) {
+      const current = presetSwitch.querySelector<HTMLButtonElement>("[data-preset].is-on");
+      current?.focus({ preventScroll: true });
+    }
+  };
+
+  const readInsets = (): SafeInsets => {
+    const css = getComputedStyle(document.documentElement);
+    const n = (name: string) => {
+      const parsed = parseFloat(css.getPropertyValue(name));
+      return Number.isFinite(parsed) ? parsed : 0;
+    };
+    return { top: n("--sat"), right: n("--sar"), bottom: n("--sab"), left: n("--sal") };
+  };
+
+  const applyPanelBox = (x: number, y: number, persistPos: boolean) => {
     const pos = clampPanelPosition(
       x,
       y,
@@ -458,12 +546,14 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
       panel.offsetHeight,
       window.innerWidth,
       window.innerHeight,
+      8,
+      readInsets(),
     );
     panel.style.left = `${pos.x}px`;
     panel.style.top = `${pos.y}px`;
     panel.style.right = "auto";
     panel.style.bottom = "auto";
-    if (persist) {
+    if (persistPos) {
       panelPrefs = { ...panelPrefs, x: pos.x, y: pos.y };
       savePanel(panelPrefs);
     }
@@ -474,19 +564,24 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
     const savedX = panelPrefs.x;
     const savedY = panelPrefs.y;
     if (savedX == null || savedY == null) {
+      const insets = readInsets();
       const pad = 12;
-      applyPanelBox(window.innerWidth - panel.offsetWidth - pad, pad, persistDefault);
+      applyPanelBox(
+        window.innerWidth - panel.offsetWidth - pad - insets.right,
+        pad + insets.top,
+        persistDefault,
+      );
       return;
     }
     applyPanelBox(savedX, savedY, false);
   };
 
-  const applyCollapsed = (collapsed: boolean, persist = true) => {
+  const applyCollapsed = (collapsed: boolean, persistPos = true) => {
     panelPrefs = { ...panelPrefs, collapsed };
     panel.classList.toggle("is-collapsed", collapsed);
     collapseBtn.setAttribute("aria-expanded", String(!collapsed));
     collapseBtn.textContent = collapsed ? "Aufklappen" : "Zuklappen";
-    if (persist) savePanel(panelPrefs);
+    if (persistPos) savePanel(panelPrefs);
     placePanel();
   };
 
@@ -494,6 +589,7 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
     panelRoot.hidden = !open;
     const toggle = parent.querySelector("[data-act=panel]");
     toggle?.setAttribute("aria-expanded", String(open));
+    parent.classList.toggle("has-panel", open);
     if (!open) return;
     applyCollapsed(panelPrefs.collapsed, false);
     placePanel();
@@ -501,30 +597,43 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
   };
 
   let dragging = false;
-  let dragDx = 0;
-  let dragDy = 0;
+  let dragMoved = false;
+  let dragStartX = 0;
+  let dragStartY = 0;
+  let dragOriginX = 0;
+  let dragOriginY = 0;
 
   panelHead.addEventListener("pointerdown", (event) => {
     if ((event.target as HTMLElement).closest("button")) return;
     if (event.pointerType === "mouse" && event.button !== 0) return;
     event.preventDefault();
     dragging = true;
+    dragMoved = false;
     panelHead.setPointerCapture(event.pointerId);
     const rect = panel.getBoundingClientRect();
-    dragDx = event.clientX - rect.left;
-    dragDy = event.clientY - rect.top;
-    panel.classList.add("is-dragging");
+    dragStartX = event.clientX;
+    dragStartY = event.clientY;
+    dragOriginX = rect.left;
+    dragOriginY = rect.top;
   });
 
   panelHead.addEventListener("pointermove", (event) => {
     if (!dragging) return;
-    applyPanelBox(event.clientX - dragDx, event.clientY - dragDy, false);
+    const dx = event.clientX - dragStartX;
+    const dy = event.clientY - dragStartY;
+    if (!dragMoved && dx * dx + dy * dy < DRAG_SLOP * DRAG_SLOP) return;
+    if (!dragMoved) {
+      dragMoved = true;
+      panel.classList.add("is-dragging");
+    }
+    applyPanelBox(dragOriginX + dx, dragOriginY + dy, false);
   });
 
   const endDrag = () => {
     if (!dragging) return;
     dragging = false;
     panel.classList.remove("is-dragging");
+    if (!dragMoved) return;
     const rect = panel.getBoundingClientRect();
     applyPanelBox(rect.left, rect.top, true);
   };
@@ -532,13 +641,29 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
   panelHead.addEventListener("pointerup", endDrag);
   panelHead.addEventListener("pointercancel", endDrag);
 
-  window.addEventListener("resize", () => {
-    placePanel();
+  panelHead.addEventListener("dblclick", (event) => {
+    if ((event.target as HTMLElement).closest("button")) return;
+    applyCollapsed(!panelPrefs.collapsed);
   });
 
+  const onViewport = () => {
+    placePanel();
+  };
+  window.addEventListener("resize", onViewport);
+  window.visualViewport?.addEventListener("resize", onViewport);
+
   window.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && !panelRoot.hidden) {
+    if (event.key !== "Escape") return;
+    if (!presetSwitch.hidden) {
+      setPresetSwitch(false);
+      return;
+    }
+    if (!panelRoot.hidden) {
       setPanel(false);
+      return;
+    }
+    if (!firstRun.hidden) {
+      markOnboardSeen();
     }
   });
 
@@ -554,7 +679,12 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
     const btn = (event.target as HTMLElement).closest<HTMLButtonElement>(
       "[data-act], [data-quality], [data-preset], [data-fps]",
     );
-    if (!btn) return;
+    if (!btn) {
+      if ((event.target as HTMLElement) === presetSwitch) {
+        setPresetSwitch(false);
+      }
+      return;
+    }
     const act = btn.dataset.act;
     const quality = btn.dataset.quality;
     const preset = btn.dataset.preset;
@@ -569,12 +699,16 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
     }
     if (isPreset(preset)) {
       choosePreset(preset);
+      setPresetSwitch(false);
       return;
     }
     if (act === "sensitivity-auto") {
       persist({ ...settings, sensitivityAuto: !settings.sensitivityAuto });
       return;
     }
+    if (act === "presets") setPresetSwitch(presetSwitch.hidden);
+    if (act === "close-presets") setPresetSwitch(false);
+    if (act === "skip-onboard") markOnboardSeen();
     if (act === "panel") setPanel(panelRoot.hidden);
     if (act === "close-panel") setPanel(false);
     if (act === "collapse-panel") applyCollapsed(!panelPrefs.collapsed);
@@ -612,13 +746,6 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
       pickedDeviceId = deviceSelect.value;
       if (lab.kind === "mic" || lab.kind === "none") {
         void startMic();
-      }
-      return;
-    }
-    if (el === presetSelect) {
-      const next = presetSelect.value;
-      if (isPreset(next)) {
-        choosePreset(next);
       }
       return;
     }
@@ -702,6 +829,9 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
   async function runInput(fn: () => Promise<void>, ok: string, denied?: string): Promise<void> {
     try {
       await fn();
+      if (lab.kind !== "none") {
+        markOnboardSeen();
+      }
       if (!(lab.kind === "mic" && lab.bluetoothLikely)) {
         toast(ok);
       }

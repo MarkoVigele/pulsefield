@@ -36,7 +36,7 @@ Wir nehmen nur Quellen, die das Gerät oder der Browser wirklich hergeben. Keine
 | **Tab / System** | `getDisplayMedia` plus Audio, `systemAudio: 'include'` wo der Browser das kennt | **Nur Desktop-Chrome.** Im Teilen-Dialog Tab oder Bildschirm wählen **und** den Haken „Tab-Audio teilen“ / „Systemaudio“ setzen. Ohne Haken bleibt das Feld still. Auf dem Handy ist der Knopf sichtbar, aber deaktiviert (Nur Desktop). |
 | **Datei** | Audio-Upload oder Datei auf das Feld ziehen | Der verlässliche Weg auf dem Handy, wenn der Raumton nicht passt. MP3, WAV, OGG, M4A, FLAC, AAC. Läuft in Schleife. |
 
-Stop trennt den aktuellen Eingang. Das Fenster **Einstellungen** liegt über dem Feld (ziehen, zuklappen) und bleibt in `localStorage`.
+Beim ersten Besuch drei Karten: **Mikrofon**, **Datei**, **Tab / System**. Danach liegt das Dock unten. Stop trennt den aktuellen Eingang. Das Fenster **Einstellungen** liegt über dem Feld (ziehen, zuklappen) und bleibt in `localStorage`.
 
 ### Was der Browser nicht kann
 
@@ -61,17 +61,19 @@ Lichtinsel braucht für echtes 3D Qualität **Mittel** oder **Hoch**. Niedrig bl
 
 ## Einstellungen
 
-Schwebendes Fenster über dem Feld — nicht als Vollbild-Sheet. Am Kopf ziehen, zuklappen oder schließen. Lage und Klappzustand bleiben im Speicher. Preset auch oben im HUD:
+Schwebendes Fenster über dem Feld — nicht als Vollbild-Sheet. Am Kopf ziehen (Griff), doppelklicken oder **Zuklappen**. Lage und Klappzustand bleiben im Speicher.
 
-- Preset-Wahl (fünf Canvas2D-Felder plus Lichtinsel)
-- Empfindlichkeit (Regler oder Auto am Pegel), Glättung, FFT-Größe
-- Farbpalette, Bloom/Leuchten, Dichte (Balken / Speichen / Segmente / Partikel / Zellen / Facetten), Spiegeln, Tempo, Hintergrund
-- Qualität Niedrig / Mittel / Hoch — skaliert Auflösung (DPR), Leuchten, Anzahlen und schaltet 3D frei
-- Bildrate 60 / 120 / Auto (Standard 120), Anzeige in der Ecke (Standard an)
-- Eingänge und Grenzen (zugeklappt, kurzer Hinweis)
-- Auf Standard zurücksetzen (aktives Preset)
+Oben im HUD drei Chips: **FPS**, **Quelle**, **Preset**. Preset öffnet den großen Umschalter (sechs Karten). Dieselbe Wahl sitzt oben im Fenster.
 
-Sichtbar reaktiv auf Peak, RMS und Tief/Mitte/Hoch. Mobil startet auf Qualität Niedrig. HiDPI folgt der Qualität (Niedrig 1×, Mittel bis 1.5×, Hoch bis 2.5×). Fenster und Leisten halten Abstand zur Notch (`safe-area`).
+Gruppen im Fenster:
+
+- **Quelle** — Empfindlichkeit (Regler oder Auto am Pegel), Geräteliste nach Mic-Freigabe
+- **Look** — Farbpalette, Bloom/Leuchten, Dichte, Spiegeln, Hintergrund
+- **Tempo** — Tempo, Glättung
+- **Qualität** — Niedrig / Mittel / Hoch, Bildrate 60 / 120 / Auto (Standard 120), FPS-Anzeige
+- **Mehr** — FFT-Größe, Eingänge und Grenzen, Auf Standard zurücksetzen (aktives Preset)
+
+Qualität skaliert Auflösung (DPR), Leuchten, Anzahlen und schaltet 3D frei. Sichtbar reaktiv auf Peak, RMS und Tief/Mitte/Hoch. Mobil startet auf Qualität Niedrig. HiDPI folgt der Qualität (Niedrig 1×, Mittel bis 1.5×, Hoch bis 2.5×). HUD, Dock, Fenster und Toast halten Abstand zur Notch (`safe-area`).
 
 ## Bildrate
 
@@ -83,7 +85,7 @@ Die Zeichenschleife hängt an `requestAnimationFrame` (vsync). Unter Einstellung
 | **120** | Höchstens 120 — Standard. Auf einem 60-Hz-Panel bleibt vsync bei 60 |
 | **Auto** | Folgt der Display-Auffrischung, gedeckelt bei 120 |
 
-Wir erfinden keine Frames: die Anzeige oben rechts zählt nur wirklich gezeichnete Durchläufe. Wenn das System im Leerlauf auf 30 drosselt, steht dort 30.
+Wir erfinden keine Frames: der FPS-Chip im HUD zählt nur wirklich gezeichnete Durchläufe. Wenn das System im Leerlauf auf 30 drosselt, steht dort 30.
 
 ## Empfindlichkeit Auto
 

@@ -7,21 +7,28 @@ import {
   DEFAULT_FPS_MODE,
   HUD_STORAGE_KEY,
   LEGACY_STORAGE_KEY,
+  ONBOARD_STORAGE_KEY,
   PANEL_STORAGE_KEY,
   STORAGE_KEY,
   clampPanelPosition,
   commitSettings,
+  defaultOnboard,
   defaultPanel,
   defaultSettings,
   hydrateSettings,
   loadHud,
+  loadOnboard,
   loadPanel,
   loadSettings,
   resetSettings,
+  sanitizeOnboard,
   sanitizePanel,
   sanitizeSettings,
   saveHud,
+  saveOnboard,
   savePanel,
+  shouldShowOnboard,
+  sourceHudText,
 } from "./settings.ts";
 
 beforeEach(() => {
@@ -202,6 +209,50 @@ test("panel clamp keeps a grab strip on screen", () => {
   const right = clampPanelPosition(2000, 2000, 360, 80, 390, 700, 8);
   assert.ok(right.x < 390);
   assert.ok(right.y < 700);
+});
+
+test("panel clamp keeps the header below the notch", () => {
+  const pos = clampPanelPosition(0, 0, 360, 80, 390, 700, 8, {
+    top: 44,
+    right: 0,
+    bottom: 34,
+    left: 0,
+  });
+  assert.equal(pos.y, 52);
+  const bottom = clampPanelPosition(10, 800, 360, 80, 390, 700, 8, {
+    top: 44,
+    right: 0,
+    bottom: 34,
+    left: 0,
+  });
+  assert.ok(bottom.y <= 700 - 34 - 44);
+});
+
+test("first-run onboard stays off after a source pick or skip", () => {
+  assert.deepEqual(loadOnboard(), defaultOnboard());
+  assert.equal(shouldShowOnboard(false, "none"), true);
+  assert.equal(shouldShowOnboard(false, "mic"), false);
+  assert.equal(shouldShowOnboard(true, "none"), false);
+  saveOnboard({ seen: true });
+  assert.deepEqual(loadOnboard(), { seen: true });
+  assert.ok(localStorage.getItem(ONBOARD_STORAGE_KEY));
+  assert.deepEqual(sanitizeOnboard({ seen: 1 }), { seen: false });
+});
+
+test("returning lab with stored settings skips the first-run chooser", () => {
+  localStorage.setItem(
+    STORAGE_KEY,
+    JSON.stringify({ v: 2, preset: "bars", quality: "medium", overrides: {} }),
+  );
+  assert.deepEqual(loadOnboard(), { seen: true });
+});
+
+test("HUD source line stays short and German", () => {
+  assert.equal(sourceHudText("none", "Kein Eingang"), "Kein Eingang");
+  assert.equal(sourceHudText("tab", "ignored"), "Tab / System");
+  assert.equal(sourceHudText("file", "set.mp3"), "set.mp3");
+  assert.equal(sourceHudText("mic", "Built-in Microphone"), "Built-in Microphone");
+  assert.equal(sourceHudText("mic", "  "), "Mikrofon");
 });
 
 test("existing v2 store without the new fields gets 120 and Auto off", () => {
