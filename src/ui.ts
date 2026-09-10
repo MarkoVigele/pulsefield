@@ -591,7 +591,7 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
     toggle?.setAttribute("aria-expanded", String(open));
     parent.classList.toggle("has-panel", open);
     if (!open) return;
-    applyCollapsed(panelPrefs.collapsed, false);
+    applyCollapsed(false, true);
     placePanel();
     panel.focus({ preventScroll: true });
   };
