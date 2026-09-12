@@ -47,7 +47,7 @@ const PALETTE_LABEL: Record<(typeof PALETTES)[number], string> = {
 
 const BG_LABEL: Record<(typeof BACKGROUNDS)[number], string> = {
   void: "Leere",
-  lab: "Labor",
+  lab: "Studio",
   grid: "Raster",
   dusk: "Dämmerung",
 };
@@ -114,9 +114,9 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
       </header>
 
       <section class="first-run" id="first-run" hidden role="dialog" aria-labelledby="first-run-title">
-        <p class="first-run-kicker">Eingang</p>
-        <h1 id="first-run-title">Quelle wählen</h1>
-        <p class="first-run-copy">Mikrofon, Datei oder Tab. Ohne Quelle bleibt das Feld still.</p>
+        <p class="first-run-kicker">Pulsefield</p>
+        <h1 id="first-run-title">Eingang</h1>
+        <p class="first-run-copy">Mikrofon, Datei oder Tab. Ohne Eingang bleibt das Feld still.</p>
         <div class="first-run-grid">
           <button type="button" class="start-btn${phone ? " start-btn--primary" : ""}" data-act="mic"${micOk ? "" : " disabled"}>
             Mikrofon
@@ -124,11 +124,11 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
           </button>
           <button type="button" class="start-btn${phone ? " start-btn--primary" : ""}" data-act="file">
             Datei
-            <small>MP3, WAV, OGG · vom Gerät</small>
+            <small>MP3, WAV, OGG</small>
           </button>
           <button type="button" class="start-btn${tabOk ? " start-btn--primary" : ""}" data-act="tab"${tabOk ? "" : " disabled"} title="${tabOk ? "Chrome-Dialog: Audio teilen aktivieren" : "Nur Desktop-Chrome"}">
             Tab / System
-            <small>${tabOk ? "Haken „Audio teilen“" : "Nur Desktop"}</small>
+            <small>${tabOk ? "Audio teilen" : "Nur Desktop"}</small>
           </button>
         </div>
         <button type="button" class="text-btn first-run-skip" data-act="skip-onboard">Feld zuerst ansehen</button>
@@ -136,21 +136,21 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
 
       <div class="floor" id="floor" hidden>
         <nav class="dock" aria-label="Eingänge">
-          <button type="button" class="dock-btn${phone ? " dock-btn--primary" : ""}" data-act="mic"${micOk ? "" : " disabled"}>
+          <button type="button" class="dock-btn dock-btn--source${phone ? " dock-btn--primary" : ""}" data-act="mic"${micOk ? "" : " disabled"}>
             Mikrofon
-            <small>${micOk ? "Geräteliste nach Freigabe" : "Nicht verfügbar"}</small>
+            <small>${micOk ? "Nach Freigabe" : "Nicht verfügbar"}</small>
           </button>
-          <button type="button" class="dock-btn dock-btn--file${phone ? " dock-btn--primary" : ""}" data-act="file">
+          <button type="button" class="dock-btn dock-btn--source dock-btn--file${phone ? " dock-btn--primary" : ""}" data-act="file">
             Datei
-            <small>MP3, WAV, OGG · vom Gerät</small>
+            <small>MP3, WAV, OGG</small>
           </button>
-          <button type="button" class="dock-btn${tabOk ? " dock-btn--primary" : ""}" data-act="tab"${tabOk ? "" : " disabled"} title="${tabOk ? "Chrome-Dialog: Audio teilen aktivieren" : "Nur Desktop-Chrome"}">
+          <button type="button" class="dock-btn dock-btn--source${tabOk ? " dock-btn--primary" : ""}" data-act="tab"${tabOk ? "" : " disabled"} title="${tabOk ? "Chrome-Dialog: Audio teilen aktivieren" : "Nur Desktop-Chrome"}">
             Tab / System
-            <small>${tabOk ? "Haken „Audio teilen“" : "Nur Desktop"}</small>
+            <small>${tabOk ? "Audio teilen" : "Nur Desktop"}</small>
           </button>
-          <button type="button" class="dock-btn dock-btn--ghost" data-act="stop">
+          <button type="button" class="dock-btn dock-btn--quiet" data-act="stop">
             Stop
-            <small>Eingang trennen</small>
+            <small>Trennen</small>
           </button>
           <button type="button" class="dock-btn dock-btn--settings" data-act="panel" aria-expanded="false" aria-controls="panel">
             Einstellungen
@@ -163,12 +163,16 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
     <div class="preset-switch" id="preset-switch" hidden>
       <div class="preset-switch-card" role="dialog" aria-modal="true" aria-labelledby="preset-switch-title">
         <header class="preset-switch-head">
-          <h2 id="preset-switch-title">Preset</h2>
+          <div>
+            <p class="preset-switch-kicker">Feld</p>
+            <h2 id="preset-switch-title">Preset</h2>
+          </div>
           <button type="button" class="text-btn" data-act="close-presets">Schließen</button>
         </header>
-        <div class="preset-grid preset-grid--big" role="radiogroup" aria-label="Preset">
+        <div class="preset-chips" role="radiogroup" aria-label="Preset">
           ${presetCards}
         </div>
+        <p class="preset-switch-hint" id="preset-switch-hint">${PRESET_HINT.bars}</p>
       </div>
     </div>
 
@@ -191,42 +195,51 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
           <button type="button" class="preset-launch" data-act="presets">
             <span>Preset</span>
             <strong id="panel-preset">Bars Classic</strong>
-            <small>Umschalter öffnen</small>
+            <small>Öffnen</small>
           </button>
 
           <details class="group" open>
-            <summary>Quelle</summary>
+            <summary>Eingang</summary>
             <div class="group-body">
               <div class="field">
-                <span>Empfindlichkeit <b id="v-sensitivity"></b></span>
+                <div class="field-label">
+                  <span>Empfindlichkeit</span>
+                  <b id="v-sensitivity"></b>
+                </div>
                 <div class="field-with-mode">
                   <input type="range" min="0.2" max="3" step="0.05" data-key="sensitivity" id="sensitivity-slider" aria-label="Empfindlichkeit" />
                   <button type="button" class="mode-btn" data-act="sensitivity-auto" aria-pressed="false">Auto</button>
                 </div>
               </div>
-              <p class="hint" id="sensitivity-hint">Regler von Hand. Auto folgt dem Pegel: leise anheben, laut zurücknehmen.</p>
+              <p class="hint" id="sensitivity-hint">Von Hand, oder Auto folgt dem Pegel.</p>
               <label class="field" id="device-pick" hidden>
-                <span>Quellen am Gerät</span>
+                <span class="field-label">Gerät</span>
                 <select id="mic-device" aria-label="Mikrofon am Gerät"></select>
               </label>
             </div>
           </details>
 
           <details class="group" open>
-            <summary>Look</summary>
+            <summary>Bild</summary>
             <div class="group-body">
               <label class="field">
-                <span>Farbpalette</span>
+                <span class="field-label">Farbpalette</span>
                 <select data-key="palette">
                   ${PALETTES.map((id) => `<option value="${id}">${PALETTE_LABEL[id]}</option>`).join("")}
                 </select>
               </label>
               <label class="field">
-                <span>Bloom / Leuchten <b id="v-bloom"></b></span>
+                <div class="field-label">
+                  <span>Leuchten</span>
+                  <b id="v-bloom"></b>
+                </div>
                 <input type="range" min="0" max="1" step="0.01" data-key="bloom" />
               </label>
               <label class="field">
-                <span><span id="density-label">Balken</span> <b id="v-barCount"></b></span>
+                <div class="field-label">
+                  <span id="density-label">Balken</span>
+                  <b id="v-barCount"></b>
+                </div>
                 <input type="range" min="8" max="160" step="1" data-key="barCount" />
               </label>
               <label class="field field--row">
@@ -234,51 +247,63 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
                 <input type="checkbox" data-key="mirror" />
               </label>
               <label class="field">
-                <span>Hintergrund</span>
+                <span class="field-label">Hintergrund</span>
                 <select data-key="background">
                   ${BACKGROUNDS.map((id) => `<option value="${id}">${BG_LABEL[id]}</option>`).join("")}
                 </select>
               </label>
-            </div>
-          </details>
-
-          <details class="group" open>
-            <summary>Tempo</summary>
-            <div class="group-body">
               <label class="field">
-                <span>Tempo <b id="v-speed"></b></span>
+                <div class="field-label">
+                  <span>Tempo</span>
+                  <b id="v-speed"></b>
+                </div>
                 <input type="range" min="0.25" max="2.5" step="0.05" data-key="speed" />
               </label>
               <label class="field">
-                <span>Glättung <b id="v-smoothing"></b></span>
+                <div class="field-label">
+                  <span>Glättung</span>
+                  <b id="v-smoothing"></b>
+                </div>
                 <input type="range" min="0" max="0.95" step="0.01" data-key="smoothing" />
               </label>
             </div>
           </details>
 
           <details class="group" open>
-            <summary>Qualität</summary>
+            <summary>Bildrate</summary>
             <div class="group-body">
-              <div class="seg" role="radiogroup" aria-label="Qualität">
-                <button type="button" data-quality="low">Niedrig</button>
-                <button type="button" data-quality="medium">Mittel</button>
-                <button type="button" data-quality="high">Hoch</button>
-              </div>
-              <p class="hint" id="quality-hint">Niedrig spart Dichte und Leuchten. Mobil startet auf Niedrig.</p>
-              <p class="hint hint--note" id="orb-note" hidden>
-                Lichtinsel in 3D braucht Qualität Mittel oder Hoch. Auf Niedrig zeichnen wir ein leichtes 2D-Stand-in, damit Mobil nutzbar bleibt.
-              </p>
-              <div class="seg" role="radiogroup" aria-label="Bildrate">
-                ${FPS_MODES.map(
-                  (mode) =>
-                    `<button type="button" data-fps="${mode}">${mode === "auto" ? "Auto" : mode}</button>`,
-                ).join("")}
+              <div class="field">
+                <span class="field-label">Ziel</span>
+                <div class="seg" role="radiogroup" aria-label="Bildrate">
+                  ${FPS_MODES.map(
+                    (mode) =>
+                      `<button type="button" data-fps="${mode}">${mode === "auto" ? "Auto" : mode}</button>`,
+                  ).join("")}
+                </div>
               </div>
               <label class="field field--row">
                 <span>FPS-Anzeige</span>
                 <input type="checkbox" id="show-fps" />
               </label>
-              <p class="hint">Zeichnen mit höchstens 60 oder 120. Auto folgt dem Display bis 120. Der FPS-Chip zählt echte Frames — ein 60-Hz-Panel bleibt bei 60.</p>
+              <p class="hint">Höchstens 60 oder 120. Auto folgt dem Display bis 120. Der Chip zählt echte Frames.</p>
+            </div>
+          </details>
+
+          <details class="group" open>
+            <summary>Qualität</summary>
+            <div class="group-body">
+              <div class="field">
+                <span class="field-label">Stufe</span>
+                <div class="seg" role="radiogroup" aria-label="Qualität">
+                  <button type="button" data-quality="low">Niedrig</button>
+                  <button type="button" data-quality="medium">Mittel</button>
+                  <button type="button" data-quality="high">Hoch</button>
+                </div>
+              </div>
+              <p class="hint" id="quality-hint">Niedrig spart Dichte und Leuchten. Mobil startet auf Niedrig.</p>
+              <p class="hint hint--note" id="orb-note" hidden>
+                Lichtinsel in 3D braucht Mittel oder Hoch. Niedrig bleibt beim 2D-Stand-in.
+              </p>
             </div>
           </details>
 
@@ -286,7 +311,7 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
             <summary>Mehr</summary>
             <div class="group-body">
               <label class="field">
-                <span>FFT-Größe</span>
+                <span class="field-label">FFT-Größe</span>
                 <select data-key="fftSize">
                   ${FFT_SIZES.map((n) => `<option value="${n}">${n}</option>`).join("")}
                 </select>
@@ -478,6 +503,7 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
     setText(parent, "#dock-preset", PRESET_LABEL[settings.preset]);
     setText(parent, "#panel-sub", PRESET_LABEL[settings.preset]);
     setText(parent, "#panel-preset", PRESET_LABEL[settings.preset]);
+    setText(parent, "#preset-switch-hint", PRESET_HINT[settings.preset]);
     setText(parent, "#quality-hint", qualityHintFor(settings.quality, settings.preset));
     const orbNote = parent.querySelector<HTMLElement>("#orb-note");
     if (orbNote) {
@@ -501,8 +527,8 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
       parent,
       "#sensitivity-hint",
       settings.sensitivityAuto
-        ? "Auto aktiv — leise anheben, laut zurücknehmen. Der Regler bleibt die manuelle Reserve."
-        : "Regler von Hand. Auto folgt dem Pegel: leise anheben, laut zurücknehmen.",
+        ? "Auto aktiv: leise anheben, laut zurücknehmen. Der Regler bleibt die Reserve."
+        : "Von Hand, oder Auto folgt dem Pegel.",
     );
     showFpsInput.checked = hudPrefs.showFps;
     fpsHud.hidden = !hudPrefs.showFps;
