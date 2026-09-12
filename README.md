@@ -1,6 +1,6 @@
 # Pulsefield
 
-Pulsefield ist unser Browser-Audio-Visualizer für Mobil und Desktop. Wir lesen den Klang im Labor — Mikrofon, Tab/System oder Datei — und zeichnen ihn auf Canvas2D, bei Lichtinsel auf Wunsch mit Three.js. Sechs Presets, ohne Reload umschaltbar.
+Pulsefield ist unser Browser-Audio-Visualizer für Mobil und Desktop. Mikrofon, Tab/System oder Datei gehen auf Canvas2D, bei Lichtinsel auf Wunsch mit Three.js. Sechs Presets, ohne Reload umschaltbar.
 
 Live (nach Merge auf `main`): [https://markovigele.github.io/pulsefield/](https://markovigele.github.io/pulsefield/)
 
@@ -36,7 +36,7 @@ Wir nehmen nur Quellen, die das Gerät oder der Browser wirklich hergeben. Keine
 | **Tab / System** | `getDisplayMedia` plus Audio, `systemAudio: 'include'` wo der Browser das kennt | **Nur Desktop-Chrome.** Im Teilen-Dialog Tab oder Bildschirm wählen **und** den Haken „Tab-Audio teilen“ / „Systemaudio“ setzen. Ohne Haken bleibt das Feld still. Auf dem Handy ist der Knopf sichtbar, aber deaktiviert (Nur Desktop). |
 | **Datei** | Audio-Upload oder Datei auf das Feld ziehen | Der verlässliche Weg auf dem Handy, wenn der Raumton nicht passt. MP3, WAV, OGG, M4A, FLAC, AAC. Läuft in Schleife. |
 
-Beim ersten Besuch drei Karten: **Mikrofon**, **Datei**, **Tab / System**. Danach liegt das Dock unten. Stop trennt den aktuellen Eingang. Das Fenster **Einstellungen** liegt über dem Feld (ziehen, zuklappen) und bleibt in `localStorage`.
+Beim ersten Besuch drei Aktionen: **Mikrofon**, **Datei**, **Tab / System**. Danach liegt das Dock unten — Eingänge als primäre Knöpfe, Stop und Einstellungen leiser. Stop trennt den aktuellen Eingang. Das Fenster **Einstellungen** liegt über dem Feld (ziehen, zuklappen) und bleibt in `localStorage`.
 
 ### Was der Browser nicht kann
 
@@ -63,14 +63,14 @@ Lichtinsel braucht für echtes 3D Qualität **Mittel** oder **Hoch**. Niedrig bl
 
 Schwebendes Fenster über dem Feld — nicht als Vollbild-Sheet. Am Kopf ziehen (Griff), doppelklicken oder **Zuklappen**. Lage und Klappzustand bleiben im Speicher.
 
-Oben im HUD drei Chips: **FPS**, **Quelle**, **Preset**. Preset öffnet den großen Umschalter (sechs Karten). Dieselbe Wahl sitzt oben im Fenster.
+Oben im HUD drei Chips: **FPS**, **Eingang**, **Preset**. Preset öffnet den Umschalter (sechs Chips, aktive Wahl ist markiert). Dieselbe Wahl sitzt oben im Fenster.
 
 Gruppen im Fenster:
 
-- **Quelle** — Empfindlichkeit (Regler oder Auto am Pegel), Geräteliste nach Mic-Freigabe
-- **Look** — Farbpalette, Bloom/Leuchten, Dichte, Spiegeln, Hintergrund
-- **Tempo** — Tempo, Glättung
-- **Qualität** — Niedrig / Mittel / Hoch, Bildrate 60 / 120 / Auto (Standard 120), FPS-Anzeige
+- **Eingang** — Empfindlichkeit (Regler oder Auto am Pegel), Geräteliste nach Mic-Freigabe
+- **Bild** — Farbpalette, Leuchten, Dichte, Spiegeln, Hintergrund, Tempo, Glättung
+- **Bildrate** — 60 / 120 / Auto (Standard 120), FPS-Anzeige
+- **Qualität** — Niedrig / Mittel / Hoch
 - **Mehr** — FFT-Größe, Eingänge und Grenzen, Auf Standard zurücksetzen (aktives Preset)
 
 Qualität skaliert Auflösung (DPR), Leuchten, Anzahlen und schaltet 3D frei. Sichtbar reaktiv auf Peak, RMS und Tief/Mitte/Hoch. Mobil startet auf Qualität Niedrig. HiDPI folgt der Qualität (Niedrig 1×, Mittel bis 1.5×, Hoch bis 2.5×). HUD, Dock, Fenster und Toast halten Abstand zur Notch (`safe-area`).
@@ -103,4 +103,4 @@ Nach dem Merge:
 
 ## Team
 
-Wir halten den Ton nüchtern: Labor, Signal, Feld. Keine Marketing-Floskeln.
+Wir halten den Ton nüchtern: Signal, Feld, Gerät. Keine Marketing-Floskeln.
