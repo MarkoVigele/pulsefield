@@ -1,4 +1,5 @@
 import { AudioLab } from "./audio";
+import { DONATE_COPY, DONATE_HREF, DONATE_LABEL } from "./donate";
 import {
   DENSITY_LABEL,
   PRESETS,
@@ -134,29 +135,41 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
         <button type="button" class="text-btn first-run-skip" data-act="skip-onboard">Feld zuerst ansehen</button>
       </section>
 
-      <div class="floor" id="floor" hidden>
-        <nav class="dock" aria-label="Eingänge">
-          <button type="button" class="dock-btn dock-btn--source${phone ? " dock-btn--primary" : ""}" data-act="mic"${micOk ? "" : " disabled"}>
-            Mikrofon
-            <small>${micOk ? "Nach Freigabe" : "Nicht verfügbar"}</small>
-          </button>
-          <button type="button" class="dock-btn dock-btn--source dock-btn--file${phone ? " dock-btn--primary" : ""}" data-act="file">
-            Datei
-            <small>MP3, WAV, OGG</small>
-          </button>
-          <button type="button" class="dock-btn dock-btn--source${tabOk ? " dock-btn--primary" : ""}" data-act="tab"${tabOk ? "" : " disabled"} title="${tabOk ? "Chrome-Dialog: Audio teilen aktivieren" : "Nur Desktop-Chrome"}">
-            Tab / System
-            <small>${tabOk ? "Audio teilen" : "Nur Desktop"}</small>
-          </button>
-          <button type="button" class="dock-btn dock-btn--quiet" data-act="stop">
-            Stop
-            <small>Trennen</small>
-          </button>
-          <button type="button" class="dock-btn dock-btn--settings" data-act="panel" aria-expanded="false" aria-controls="panel">
-            Einstellungen
-            <small id="dock-preset">Bars Classic</small>
-          </button>
-        </nav>
+      <div class="site-foot">
+        <div class="floor" id="floor" hidden>
+          <nav class="dock" aria-label="Eingänge">
+            <button type="button" class="dock-btn dock-btn--source${phone ? " dock-btn--primary" : ""}" data-act="mic"${micOk ? "" : " disabled"}>
+              Mikrofon
+              <small>${micOk ? "Nach Freigabe" : "Nicht verfügbar"}</small>
+            </button>
+            <button type="button" class="dock-btn dock-btn--source dock-btn--file${phone ? " dock-btn--primary" : ""}" data-act="file">
+              Datei
+              <small>MP3, WAV, OGG</small>
+            </button>
+            <button type="button" class="dock-btn dock-btn--source${tabOk ? " dock-btn--primary" : ""}" data-act="tab"${tabOk ? "" : " disabled"} title="${tabOk ? "Chrome-Dialog: Audio teilen aktivieren" : "Nur Desktop-Chrome"}">
+              Tab / System
+              <small>${tabOk ? "Audio teilen" : "Nur Desktop"}</small>
+            </button>
+            <button type="button" class="dock-btn dock-btn--quiet" data-act="stop">
+              Stop
+              <small>Trennen</small>
+            </button>
+            <button type="button" class="dock-btn dock-btn--settings" data-act="panel" aria-expanded="false" aria-controls="panel">
+              Einstellungen
+              <small id="dock-preset">Bars Classic</small>
+            </button>
+          </nav>
+        </div>
+        <p class="donate">
+          <a
+            class="donate-chip"
+            href="${DONATE_HREF}"
+            target="_blank"
+            rel="noopener"
+            aria-describedby="donate-copy"
+          >${DONATE_LABEL}</a>
+          <small id="donate-copy">${DONATE_COPY}</small>
+        </p>
       </div>
     </div>
 
