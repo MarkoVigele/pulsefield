@@ -41,10 +41,10 @@ const CLEAR: Record<Settings["background"], number> = {
 };
 
 const SIDES = 6;
-const RADIUS = 1.32;
+const RADIUS = 1.38;
 const GROUND_Y = -1.12;
-const BASE_H = 0.52;
-const SPAN_H = 2.05;
+const BASE_H = 0.82;
+const SPAN_H = 1.85;
 
 export function canCreatePrismScene(): boolean {
   if (typeof document === "undefined") return false;
@@ -92,13 +92,21 @@ export function createPrismScene(host: HTMLElement, after?: HTMLCanvasElement | 
   const crown = new Line(new BufferGeometry(), crownMat);
   root.add(crown);
 
-  const frameMat = new LineBasicMaterial({ color: 0x8ec8d8, transparent: true, opacity: 0.42 });
+  const frameMat = new LineBasicMaterial({ color: 0xb8e8f4, transparent: true, opacity: 0.78 });
   const frame = new LineSegments(makeFrameGeometry(), frameMat);
   root.add(frame);
 
   const groundMat = new LineBasicMaterial({ color: 0x6a8898, transparent: true, opacity: 0.28 });
   const ground = new LineSegments(makeGroundGeometry(), groundMat);
-  root.add(ground);
+  const plateMat = new MeshBasicMaterial({
+    color: 0x0a1016,
+    transparent: true,
+    opacity: 0.72,
+    side: DoubleSide,
+  });
+  const plate = new Mesh(makeHexPlate(RADIUS * 1.04), plateMat);
+  plate.position.y = GROUND_Y - 0.002;
+  root.add(plate, ground);
 
   const spineMat = new LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.9 });
   const spine = new Line(new BufferGeometry(), spineMat);
@@ -206,8 +214,9 @@ export function createPrismScene(host: HTMLElement, after?: HTMLCanvasElement | 
   const draw = (snap: AudioSnapshot, settings: Settings, now: number) => {
     resize(settings.quality);
     const profile = profileFor(settings.quality);
-    const cols = Math.max(8, Math.min(72, Math.round(settings.barCount * (profile.density ?? 1))));
-    const spineN = Math.max(28, Math.min(128, Math.round((profile.orbPoints || 280) / 6)));
+    const total = Math.max(24, Math.min(120, Math.round(settings.barCount * profile.density)));
+    const cols = Math.max(6, Math.min(18, Math.round(total / SIDES)));
+    const spineN = Math.max(28, Math.min(96, Math.round((profile.orbPoints || 280) / 8)));
     ensureMeshes(cols, spineN);
 
     const bins = collectBars(snap, cols, now);
@@ -218,9 +227,9 @@ export function createPrismScene(host: HTMLElement, after?: HTMLCanvasElement | 
     const clear = CLEAR[settings.background];
 
     renderer.setClearColor(clear);
-    wallMat.opacity = 0.78 + snap.rms * 0.16;
+    wallMat.opacity = 0.9 + snap.rms * 0.08;
     frameMat.color.copy(accent);
-    frameMat.opacity = 0.28 + snap.low * 0.22 + kick * 0.2;
+    frameMat.opacity = 0.55 + snap.low * 0.2 + kick * 0.18;
     groundMat.color.copy(accent);
     groundMat.opacity = 0.16 + snap.low * 0.18;
     shockMat.color.copy(accent);
@@ -286,6 +295,8 @@ export function createPrismScene(host: HTMLElement, after?: HTMLCanvasElement | 
     crownMat.dispose();
     frame.geometry.dispose();
     frameMat.dispose();
+    plate.geometry.dispose();
+    plateMat.dispose();
     ground.geometry.dispose();
     groundMat.dispose();
     spine.geometry.dispose();
@@ -314,6 +325,13 @@ function hexAngle(index: number, sides = SIDES): number {
 function hexPoint(index: number, radius: number, sides = SIDES): { x: number; z: number } {
   const a = hexAngle(index, sides);
   return { x: Math.cos(a) * radius, z: Math.sin(a) * radius };
+}
+
+function hexEdgePoint(side: number, t: number, radius: number): { x: number; z: number } {
+  const a = hexPoint(side, radius);
+  const b = hexPoint(side + 1, radius);
+  const k = Math.min(1, Math.max(0, t));
+  return { x: a.x + (b.x - a.x) * k, z: a.z + (b.z - a.z) * k };
 }
 
 function binAt(bins: number[], i: number, count: number, mirror: boolean): number {
@@ -395,6 +413,22 @@ function makeGroundGeometry(): BufferGeometry {
   return geo;
 }
 
+function makeHexPlate(radius: number): BufferGeometry {
+  const positions = new Float32Array((SIDES + 1) * 3);
+  const indices: number[] = [];
+  positions[1] = 0;
+  for (let i = 0; i < SIDES; i += 1) {
+    const p = hexPoint(i, radius);
+    positions[(i + 1) * 3] = p.x;
+    positions[(i + 1) * 3 + 2] = p.z;
+    indices.push(0, i + 1, i + 1 === SIDES ? 1 : i + 2);
+  }
+  const geo = new BufferGeometry();
+  geo.setAttribute("position", new BufferAttribute(positions, 3));
+  geo.setIndex(indices);
+  return geo;
+}
+
 function makeHexLoop(radius: number): BufferGeometry {
   const positions = new Float32Array(SIDES * 3);
   for (let i = 0; i < SIDES; i += 1) {
@@ -422,20 +456,17 @@ function updateWalls(
   if (cols < 1) return;
 
   for (let s = 0; s < SIDES; s += 1) {
-    const a0 = hexAngle(s);
-    const a1 = hexAngle(s + 1);
     for (let i = 0; i <= cols; i += 1) {
       const t = i / cols;
-      const a = a0 + (a1 - a0) * t;
-      const x = Math.cos(a) * RADIUS;
-      const z = Math.sin(a) * RADIUS;
+      const p = hexEdgePoint(s, t, RADIUS);
       const e = binAt(bins, Math.min(cols - 1, i), cols, settings.mirror);
       const h = barHeight(e, snap, kick);
       const base = (s * (cols + 1) + i) * 2;
-      pos.setXYZ(base, x, GROUND_Y, z);
-      pos.setXYZ(base + 1, x, GROUND_Y + h, z);
-      const rgbLo = paletteRgb(settings.palette, t * 0.7 + s / SIDES / 6, 0.35 + e * 0.4);
-      const rgbHi = paletteRgb(settings.palette, 0.35 + t * 0.6, 0.7 + e + snap.rms);
+      pos.setXYZ(base, p.x, GROUND_Y, p.z);
+      pos.setXYZ(base + 1, p.x, GROUND_Y + h, p.z);
+      const faceT = (s + t) / SIDES;
+      const rgbLo = paletteRgb(settings.palette, faceT, 0.42 + e * 0.35);
+      const rgbHi = paletteRgb(settings.palette, 0.28 + faceT * 0.55, 0.78 + e + snap.rms * 0.2);
       col.setXYZ(base, rgbLo[0] / 255, rgbLo[1] / 255, rgbLo[2] / 255);
       col.setXYZ(base + 1, rgbHi[0] / 255, rgbHi[1] / 255, rgbHi[2] / 255);
     }
@@ -458,14 +489,12 @@ function updateCrown(
   if (cols < 1) return;
   let n = 0;
   for (let s = 0; s < SIDES; s += 1) {
-    const a0 = hexAngle(s);
-    const a1 = hexAngle(s + 1);
     for (let i = 0; i < cols; i += 1) {
       const t = i / cols;
-      const a = a0 + (a1 - a0) * t;
+      const p = hexEdgePoint(s, t, RADIUS);
       const e = binAt(bins, i, cols, settings.mirror);
       const h = barHeight(e, snap, kick);
-      pos.setXYZ(n, Math.cos(a) * RADIUS, GROUND_Y + h, Math.sin(a) * RADIUS);
+      pos.setXYZ(n, p.x, GROUND_Y + h, p.z);
       const rgb = paletteRgb(settings.palette, 0.55 + t * 0.4, 1);
       col.setXYZ(n, rgb[0] / 255, rgb[1] / 255, rgb[2] / 255);
       n += 1;
@@ -509,9 +538,9 @@ function updateBands(
   kick: number,
 ): void {
   const specs = [
-    { e: snap.low, y: GROUND_Y + 0.18, r: RADIUS * (1.08 + snap.low * 0.22 + kick * 0.08), t: 0.15 },
-    { e: snap.mid, y: GROUND_Y + 0.85 + pulse * 0.12, r: RADIUS * (0.78 + snap.mid * 0.2), t: 0.5 },
-    { e: snap.high, y: GROUND_Y + 1.55 + snap.high * 0.2, r: RADIUS * (0.46 + snap.high * 0.28), t: 0.85 },
+    { e: snap.low, y: GROUND_Y + 0.04, r: RADIUS * (1.12 + snap.low * 0.16 + kick * 0.06), t: 0.15 },
+    { e: snap.mid, y: GROUND_Y + BASE_H * 0.72 + pulse * 0.08, r: RADIUS * (1.04 + snap.mid * 0.1), t: 0.5 },
+    { e: snap.high, y: GROUND_Y + BASE_H + snap.high * 0.35, r: RADIUS * (0.98 + snap.high * 0.12), t: 0.85 },
   ];
   for (let i = 0; i < bands.length; i += 1) {
     const loop = bands[i];

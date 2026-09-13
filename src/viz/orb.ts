@@ -97,7 +97,8 @@ export class PrismField implements Visualizer {
     paintBackground(ctx, width, height, settings, snap, now);
 
     const profile = profileFor(settings.quality);
-    const cols = Math.max(8, Math.min(56, Math.round(settings.barCount * profile.density)));
+    const total = Math.max(24, Math.min(96, Math.round(settings.barCount * profile.density)));
+    const cols = Math.max(6, Math.min(16, Math.round(total / SIDES)));
     const bins = collectBars(snap, cols, now);
     const { kick, pulse } = this.transients.step(snap, settings.speed);
     const bloom = glowAmount(settings);
@@ -114,11 +115,9 @@ export class PrismField implements Visualizer {
     ctx.save();
 
     const faces = Array.from({ length: SIDES }, (_, s) => {
-      const a0 = hexAngle(s);
-      const a1 = hexAngle(s + 1);
-      const mx = (Math.cos(a0) + Math.cos(a1)) * 0.5;
-      const mz = (Math.sin(a0) + Math.sin(a1)) * 0.5;
-      return { s, a0, a1, depth: mx + mz };
+      const a = hexCorner(s);
+      const b = hexCorner(s + 1);
+      return { s, depth: (a.x + b.x + a.z + b.z) * 0.5 };
     }).sort((a, b) => a.depth - b.depth);
 
     drawGround(ctx, cx, cy, scale, rgb, snap, kick);
@@ -136,7 +135,7 @@ export class PrismField implements Visualizer {
     }
 
     for (const face of faces) {
-      drawFace(ctx, cx, cy, scale, face.a0, face.a1, bins, cols, settings, snap, kick);
+      drawFace(ctx, cx, cy, scale, face.s, bins, cols, settings, snap, kick);
     }
 
     ctx.shadowBlur = 0;
@@ -150,6 +149,17 @@ export class PrismField implements Visualizer {
 
 function hexAngle(index: number): number {
   return (index / SIDES) * Math.PI * 2 - Math.PI / 6;
+}
+
+function hexCorner(index: number, radius = 1): { x: number; z: number } {
+  const a = hexAngle(index);
+  return { x: Math.cos(a) * radius, z: Math.sin(a) * radius };
+}
+
+function hexEdge(side: number, t: number, radius = 1): { x: number; z: number } {
+  const a = hexCorner(side, radius);
+  const b = hexCorner(side + 1, radius);
+  return { x: a.x + (b.x - a.x) * t, z: a.z + (b.z - a.z) * t };
 }
 
 function project(cx: number, cy: number, scale: number, x: number, y: number, z: number): { x: number; y: number } {
@@ -167,7 +177,7 @@ function binAt(bins: number[], i: number, count: number, mirror: boolean): numbe
 }
 
 function barH(energy: number, snap: AudioSnapshot, kick: number): number {
-  return 0.42 + energy * 1.55 + snap.rms * 0.14 + kick * 0.08;
+  return 0.72 + energy * 1.45 + snap.rms * 0.14 + kick * 0.08;
 }
 
 function drawGround(
@@ -229,8 +239,7 @@ function drawFace(
   cx: number,
   cy: number,
   scale: number,
-  a0: number,
-  a1: number,
+  side: number,
   bins: number[],
   cols: number,
   settings: Settings,
@@ -242,22 +251,20 @@ function drawFace(
     const t1 = (i + 1) / cols;
     const e = binAt(bins, i, cols, settings.mirror);
     const h = barH(e, snap, kick);
-    const x0 = Math.cos(a0 + (a1 - a0) * t0);
-    const z0 = Math.sin(a0 + (a1 - a0) * t0);
-    const x1 = Math.cos(a0 + (a1 - a0) * t1);
-    const z1 = Math.sin(a0 + (a1 - a0) * t1);
-    const b0 = project(cx, cy, scale, x0, 0, z0);
-    const b1 = project(cx, cy, scale, x1, 0, z1);
-    const tL = project(cx, cy, scale, x0, h, z0);
-    const tR = project(cx, cy, scale, x1, h, z1);
+    const q0 = hexEdge(side, t0);
+    const q1 = hexEdge(side, t1);
+    const b0 = project(cx, cy, scale, q0.x, 0, q0.z);
+    const b1 = project(cx, cy, scale, q1.x, 0, q1.z);
+    const tL = project(cx, cy, scale, q0.x, h, q0.z);
+    const tR = project(cx, cy, scale, q1.x, h, q1.z);
     ctx.beginPath();
     ctx.moveTo(b0.x, b0.y);
     ctx.lineTo(b1.x, b1.y);
     ctx.lineTo(tR.x, tR.y);
     ctx.lineTo(tL.x, tL.y);
     ctx.closePath();
-    ctx.fillStyle = paletteColor(settings.palette, t0 * 0.7 + 0.15, 0.35 + e);
-    ctx.globalAlpha = 0.28 + e * 0.62;
+    ctx.fillStyle = paletteColor(settings.palette, (side + t0) / SIDES, 0.4 + e);
+    ctx.globalAlpha = 0.38 + e * 0.55;
     ctx.fill();
   }
   ctx.globalAlpha = 1;
@@ -278,13 +285,11 @@ function drawCrown(
   ctx.beginPath();
   let started = false;
   for (let s = 0; s < SIDES; s += 1) {
-    const a0 = hexAngle(s);
-    const a1 = hexAngle(s + 1);
     for (let i = 0; i < cols; i += 1) {
       const t = i / cols;
-      const a = a0 + (a1 - a0) * t;
+      const q = hexEdge(s, t);
       const h = barH(binAt(bins, i, cols, settings.mirror), snap, kick);
-      const p = project(cx, cy, scale, Math.cos(a), h, Math.sin(a));
+      const p = project(cx, cy, scale, q.x, h, q.z);
       if (!started) {
         ctx.moveTo(p.x, p.y);
         started = true;
