@@ -1,6 +1,6 @@
 # Pulsefield
 
-Pulsefield ist unser Browser-Audio-Visualizer für Mobil und Desktop. Mikrofon, Tab/System oder Datei gehen auf Canvas2D, bei Lichtinsel auf Wunsch mit Three.js. Sechs Presets, ohne Reload umschaltbar.
+Pulsefield ist unser Browser-Audio-Visualizer für Mobil und Desktop. Mikrofon, Tab/System oder Datei gehen auf Canvas2D, bei Prisma auf Wunsch mit Three.js. Sechs Presets, ohne Reload umschaltbar.
 
 Live (nach Merge auf `main`): [https://markovigele.github.io/pulsefield/](https://markovigele.github.io/pulsefield/)
 
@@ -55,9 +55,9 @@ Wir schalten ohne Reload. Jedes Preset bringt eigene Defaults mit. Wer Werte än
 | **Wellenband** | Zeitwelle als Band plus Nachzüge |
 | **Partikelfeld** | 2D-Schwarm, Ausbrüche auf Peak/Bass |
 | **Bloomraster** | Leuchtende Zellen, Welle vom Zentrum bei Hits |
-| **Lichtinsel** | Weiche 3D-Kugel über einer leuchtenden Insel. Auf Qualität Niedrig ein leichtes 2D-Stand-in, damit Mobil nutzbar bleibt. |
+| **Prisma** | Sechskant aus Spektrumkanten, Kronenlinie und Oszillo-Spur in der Mitte. Auf Qualität Niedrig ein 2D-Stand-in, damit Mobil nutzbar bleibt. |
 
-Lichtinsel braucht für echtes 3D Qualität **Mittel** oder **Hoch**. Niedrig bleibt bei der 2D-Variante — wir wollen auf dem Handy keine 3D-Last bei ~30 fps.
+Prisma braucht für echtes 3D Qualität **Mittel** oder **Hoch**. Niedrig bleibt bei der 2D-Variante: auf dem Handy keine 3D-Last bei etwa 30 fps. Die Preset-id bleibt `orb`, gespeicherte Werte für diesen Slot gelten weiter.
 
 ## Einstellungen
 

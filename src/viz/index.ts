@@ -1,7 +1,7 @@
 import type { PresetId } from "../presets";
 import { BarsClassic } from "./bars";
 import { BloomGrid } from "./bloom";
-import { LightIsland } from "./orb";
+import { PrismField } from "./orb";
 import { ParticleField } from "./particles";
 import { WaveformRibbon } from "./ribbon";
 import { RingRadial } from "./ring";
@@ -20,7 +20,7 @@ export function createVisualizer(id: PresetId): Visualizer {
     case "bloom":
       return new BloomGrid();
     case "orb":
-      return new LightIsland();
+      return new PrismField();
     default:
       return new BarsClassic();
   }

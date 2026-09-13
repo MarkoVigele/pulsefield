@@ -1,22 +1,19 @@
 import {
-  ACESFilmicToneMapping,
-  AmbientLight,
   BufferAttribute,
   BufferGeometry,
-  CircleGeometry,
   Color,
-  FogExp2,
+  DoubleSide,
   Group,
+  Line,
+  LineBasicMaterial,
+  LineLoop,
+  LineSegments,
   Mesh,
-  MeshStandardMaterial,
+  MeshBasicMaterial,
+  NoToneMapping,
   PerspectiveCamera,
-  PointLight,
-  Points,
-  PointsMaterial,
-  RingGeometry,
   SRGBColorSpace,
   Scene,
-  SphereGeometry,
   Vector2,
   WebGLRenderer,
 } from "three";
@@ -28,9 +25,9 @@ import type { AudioSnapshot } from "../audio";
 import { paletteRgb } from "../palettes";
 import { pixelRatioFor, profileFor, type Quality } from "../quality";
 import type { Settings } from "../settings";
-import { TransientTracker, canvasCssSize, collectBars, glowAmount } from "./shared";
+import { TransientTracker, canvasCssSize, collectBars, glowAmount, sampleWave } from "./shared";
 
-export type OrbScene = {
+export type PrismScene = {
   resize(quality: Quality): void;
   draw(snap: AudioSnapshot, settings: Settings, now: number): void;
   dispose(): void;
@@ -43,7 +40,13 @@ const CLEAR: Record<Settings["background"], number> = {
   grid: 0x07090f,
 };
 
-export function canCreateOrbScene(): boolean {
+const SIDES = 6;
+const RADIUS = 1.32;
+const GROUND_Y = -1.12;
+const BASE_H = 0.52;
+const SPAN_H = 2.05;
+
+export function canCreatePrismScene(): boolean {
   if (typeof document === "undefined") return false;
   try {
     const probe = document.createElement("canvas");
@@ -53,15 +56,14 @@ export function canCreateOrbScene(): boolean {
   }
 }
 
-export function createOrbScene(host: HTMLElement, after?: HTMLCanvasElement | null): OrbScene {
+export function createPrismScene(host: HTMLElement, after?: HTMLCanvasElement | null): PrismScene {
   const renderer = new WebGLRenderer({
     antialias: false,
     alpha: false,
     powerPreference: "high-performance",
   });
   renderer.outputColorSpace = SRGBColorSpace;
-  renderer.toneMapping = ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.08;
+  renderer.toneMapping = NoToneMapping;
   renderer.setClearColor(CLEAR.void);
   renderer.domElement.className = "viz viz--webgl";
   renderer.domElement.setAttribute("aria-hidden", "true");
@@ -72,98 +74,68 @@ export function createOrbScene(host: HTMLElement, after?: HTMLCanvasElement | nu
   }
 
   const scene = new Scene();
-  scene.fog = new FogExp2(CLEAR.void, 0.085);
-  const camera = new PerspectiveCamera(42, 1, 0.1, 40);
+  const camera = new PerspectiveCamera(40, 1, 0.1, 48);
   const root = new Group();
   scene.add(root);
 
-  const ambient = new AmbientLight(0x6a7a88, 0.22);
-  const key = new PointLight(0x9ad4ff, 4.2, 16, 1.4);
-  key.position.set(0, 0.35, 0.2);
-  scene.add(ambient, key);
-
-  let orbGeo = new SphereGeometry(1, 32, 32);
-  let origPos = floatCopy(orbGeo.getAttribute("position"));
-  const orbMat = new MeshStandardMaterial({
-    color: 0x7ad4ff,
-    emissive: 0x245070,
-    emissiveIntensity: 0.85,
-    roughness: 0.32,
-    metalness: 0.22,
-  });
-  const orb = new Mesh(orbGeo, orbMat);
-  orb.position.y = 0.2;
-
-  const coreMat = new MeshStandardMaterial({
-    color: 0xffffff,
-    emissive: 0xffffff,
-    emissiveIntensity: 1.4,
-    roughness: 1,
-    metalness: 0,
-  });
-  const core = new Mesh(new SphereGeometry(0.52, 24, 24), coreMat);
-  core.position.y = 0.2;
-
-  const islandMat = new MeshStandardMaterial({
-    color: 0x10141c,
-    roughness: 0.18,
-    metalness: 0.62,
-    emissive: 0x0a1220,
-    emissiveIntensity: 0.35,
-  });
-  const island = new Mesh(new CircleGeometry(2.35, 72), islandMat);
-  island.rotation.x = -Math.PI / 2;
-  island.position.y = -1.12;
-
-  const rimMat = new MeshStandardMaterial({
-    color: 0x7ad4ff,
-    emissive: 0x3aa0c8,
-    emissiveIntensity: 0.8,
-    roughness: 0.4,
-    metalness: 0.1,
-  });
-  const rim = new Mesh(new RingGeometry(2.28, 2.62, 80), rimMat);
-  rim.rotation.x = -Math.PI / 2;
-  rim.position.y = -1.1;
-
-  root.add(island, rim, orb, core);
-
-  const pointsGeo = new BufferGeometry();
-  const pointsMat = new PointsMaterial({
-    color: 0xc8f4ff,
-    size: 0.035,
+  const wallMat = new MeshBasicMaterial({
+    vertexColors: true,
     transparent: true,
-    opacity: 0.72,
-    depthWrite: false,
-    sizeAttenuation: true,
+    opacity: 0.86,
+    side: DoubleSide,
+    depthWrite: true,
   });
-  const points = new Points(pointsGeo, pointsMat);
-  root.add(points);
+  const wallMesh = new Mesh(new BufferGeometry(), wallMat);
+  root.add(wallMesh);
 
-  let pointState: { x: number; y: number; z: number; life: number }[] = [];
+  const crownMat = new LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.95 });
+  const crown = new Line(new BufferGeometry(), crownMat);
+  root.add(crown);
+
+  const frameMat = new LineBasicMaterial({ color: 0x8ec8d8, transparent: true, opacity: 0.42 });
+  const frame = new LineSegments(makeFrameGeometry(), frameMat);
+  root.add(frame);
+
+  const groundMat = new LineBasicMaterial({ color: 0x6a8898, transparent: true, opacity: 0.28 });
+  const ground = new LineSegments(makeGroundGeometry(), groundMat);
+  root.add(ground);
+
+  const spineMat = new LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.9 });
+  const spine = new Line(new BufferGeometry(), spineMat);
+  root.add(spine);
+
+  const bandMats = [0, 1, 2].map(
+    () => new LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.35 }),
+  );
+  const bands = bandMats.map((mat) => {
+    const loop = new LineLoop(makeHexLoop(1), mat);
+    loop.position.y = GROUND_Y;
+    root.add(loop);
+    return loop;
+  });
+
+  const shockMat = new LineBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0 });
+  const shockPool = Array.from({ length: 5 }, () => {
+    const loop = new LineLoop(makeHexLoop(1), shockMat.clone());
+    loop.position.y = GROUND_Y + 0.01;
+    loop.visible = false;
+    root.add(loop);
+    return { loop, life: 0, radius: 1 };
+  });
+
   const transients = new TransientTracker();
   let lastQuality: Quality | null = null;
   let lastW = 0;
   let lastH = 0;
   let lastDpr = 0;
+  let lastCols = 0;
+  let lastSpine = 0;
   let composer: EffectComposer | null = null;
   let bloomPass: UnrealBloomPass | null = null;
-  let theta = 0.35;
+  let theta = 0.72;
+  let shockCursor = 0;
 
   const refCanvas = after ?? renderer.domElement;
-
-  const rebuildOrb = (segments: number) => {
-    orb.geometry.dispose();
-    orbGeo = new SphereGeometry(1, segments, segments);
-    origPos = floatCopy(orbGeo.getAttribute("position"));
-    orb.geometry = orbGeo;
-  };
-
-  const rebuildPoints = (count: number) => {
-    pointState = Array.from({ length: count }, () => spawnPoint(true));
-    const buf = new Float32Array(count * 3);
-    pointsGeo.setAttribute("position", new BufferAttribute(buf, 3));
-  };
 
   const dropComposer = () => {
     composer?.dispose();
@@ -180,7 +152,7 @@ export function createOrbScene(host: HTMLElement, after?: HTMLCanvasElement | nu
     dropComposer();
     const next = new EffectComposer(renderer);
     next.addPass(new RenderPass(scene, camera));
-    const bloom = new UnrealBloomPass(new Vector2(w, h), 0.72, 0.42, 0.18);
+    const bloom = new UnrealBloomPass(new Vector2(w, h), 0.34, 0.28, 0.22);
     next.addPass(bloom);
     next.addPass(new OutputPass());
     composer = next;
@@ -190,12 +162,6 @@ export function createOrbScene(host: HTMLElement, after?: HTMLCanvasElement | nu
   const applyQuality = (quality: Quality, w: number, h: number) => {
     const profile = profileFor(quality);
     const dpr = pixelRatioFor(quality);
-    if (orbGeo.parameters.widthSegments !== profile.orbSegments) {
-      rebuildOrb(profile.orbSegments);
-    }
-    if (pointState.length !== profile.orbPoints) {
-      rebuildPoints(profile.orbPoints);
-    }
     if (w !== lastW || h !== lastH || dpr !== lastDpr) {
       renderer.setPixelRatio(dpr);
       renderer.setSize(w, h, false);
@@ -222,102 +188,88 @@ export function createOrbScene(host: HTMLElement, after?: HTMLCanvasElement | nu
     }
   };
 
+  const ensureMeshes = (cols: number, spineN: number) => {
+    if (cols !== lastCols) {
+      wallMesh.geometry.dispose();
+      wallMesh.geometry = makeWallGeometry(cols);
+      crown.geometry.dispose();
+      crown.geometry = makeCrownGeometry(cols);
+      lastCols = cols;
+    }
+    if (spineN !== lastSpine) {
+      spine.geometry.dispose();
+      spine.geometry = makeSpineGeometry(spineN);
+      lastSpine = spineN;
+    }
+  };
+
   const draw = (snap: AudioSnapshot, settings: Settings, now: number) => {
     resize(settings.quality);
     const profile = profileFor(settings.quality);
+    const cols = Math.max(8, Math.min(72, Math.round(settings.barCount * (profile.density ?? 1))));
+    const spineN = Math.max(28, Math.min(128, Math.round((profile.orbPoints || 280) / 6)));
+    ensureMeshes(cols, spineN);
+
+    const bins = collectBars(snap, cols, now);
     const { kick, pulse } = transients.step(snap, settings.speed);
-    const bins = collectBars(snap, 28, now);
     const glow = glowAmount(settings);
-    const [r, g, b] = paletteRgb(settings.palette, 0.55, 0.85 + snap.rms);
-    const color = new Color(r / 255, g / 255, b / 255);
-    const tip = paletteRgb(settings.palette, 0.9, 1);
-    const tipColor = new Color(tip[0] / 255, tip[1] / 255, tip[2] / 255);
+    const [cr, cg, cb] = paletteRgb(settings.palette, 0.55, 0.9 + snap.rms);
+    const accent = new Color(cr / 255, cg / 255, cb / 255);
     const clear = CLEAR[settings.background];
 
     renderer.setClearColor(clear);
-    if (scene.fog instanceof FogExp2) {
-      scene.fog.color.setHex(clear);
-      scene.fog.density = 0.07 + snap.low * 0.03;
-    }
+    wallMat.opacity = 0.78 + snap.rms * 0.16;
+    frameMat.color.copy(accent);
+    frameMat.opacity = 0.28 + snap.low * 0.22 + kick * 0.2;
+    groundMat.color.copy(accent);
+    groundMat.opacity = 0.16 + snap.low * 0.18;
+    shockMat.color.copy(accent);
 
-    orbMat.color.copy(color);
-    orbMat.emissive.copy(color).multiplyScalar(0.45);
-    orbMat.emissiveIntensity = 0.55 + snap.rms * 1.1 + glow * 0.6;
-    orbMat.roughness = 0.28 + snap.high * 0.15;
-    coreMat.emissive.copy(tipColor);
-    coreMat.emissiveIntensity = 1.1 + snap.peak * 1.4 + kick * 1.2;
-    key.color.copy(color);
-    key.intensity = 2.6 + snap.rms * 6 + kick * 4;
-    islandMat.emissive.copy(color).multiplyScalar(0.22 + snap.low * 0.35);
-    rimMat.color.copy(color);
-    rimMat.emissive.copy(color);
-    rimMat.emissiveIntensity = 0.45 + snap.low * 0.9 + kick * 0.6;
-    pointsMat.color.copy(tipColor);
-    pointsMat.size = 0.028 + snap.high * 0.03 + (profile.bloomPass ? 0.01 : 0);
+    updateWalls(wallMesh.geometry, bins, settings, snap, kick);
+    updateCrown(crown.geometry, bins, settings, snap, kick);
+    updateSpine(spine.geometry, snap, settings, now);
+    updateBands(bands, bandMats, settings, snap, pulse, kick);
 
-    const pos = orbGeo.getAttribute("position");
-    const count = pos.count;
-    for (let i = 0; i < count; i += 1) {
-      const ox = origPos[i * 3] ?? 0;
-      const oy = origPos[i * 3 + 1] ?? 0;
-      const oz = origPos[i * 3 + 2] ?? 0;
-      const len = Math.hypot(ox, oy, oz) || 1;
-      const nx = ox / len;
-      const ny = oy / len;
-      const nz = oz / len;
-      const t = (ny + 1) * 0.5;
-      const idx = Math.min(bins.length - 1, Math.floor(t * bins.length));
-      const energy = bins[idx] ?? 0;
-      const wave = Math.sin(t * 9 + now * 0.0014 * settings.speed + nx * 3) * snap.mid * 0.05;
-      const radius = 1 + energy * 0.3 + snap.rms * 0.07 + wave + kick * 0.05;
-      pos.setXYZ(i, nx * radius, ny * radius, nz * radius);
-    }
-    pos.needsUpdate = true;
-    if (settings.quality === "high") {
-      orbGeo.computeVertexNormals();
-    }
-
-    const breathe = 1 + snap.rms * 0.14 + kick * 0.09;
-    orb.scale.setScalar(breathe);
-    core.scale.setScalar(0.92 + pulse * 0.18 + snap.peak * 0.12);
-    island.scale.setScalar(1 + snap.low * 0.12 + kick * 0.04);
-    rim.scale.setScalar(1 + kick * 0.16 + pulse * 0.05);
-
-    const attr = pointsGeo.getAttribute("position");
-    for (let i = 0; i < pointState.length; i += 1) {
-      const p = pointState[i];
-      if (!p || !attr) continue;
-      p.life -= 1;
-      p.y += 0.006 * settings.speed + snap.low * 0.004;
-      const spin = now * 0.00018 * settings.speed + i * 0.01;
-      const side = settings.mirror && i % 2 === 0 ? -1 : 1;
-      p.x += Math.cos(spin) * 0.002 * side;
-      p.z += Math.sin(spin) * 0.002;
-      if (kick > 0.12) {
-        p.x *= 1.01;
-        p.z *= 1.01;
-        p.y += kick * 0.04;
+    if (kick > 0.14) {
+      const slot = shockPool[shockCursor % shockPool.length];
+      shockCursor += 1;
+      if (slot) {
+        slot.life = 1;
+        slot.radius = RADIUS * (0.92 + kick * 0.08);
+        slot.loop.visible = true;
       }
-      if (p.life <= 0 || Math.hypot(p.x, p.z) > 3.4 || p.y > 2.4) {
-        const next = spawnPoint(false);
-        p.x = next.x;
-        p.y = next.y;
-        p.z = next.z;
-        p.life = next.life;
-      }
-      attr.setXYZ(i, p.x, p.y, p.z);
     }
-    if (attr) attr.needsUpdate = true;
+    for (const slot of shockPool) {
+      if (slot.life <= 0) {
+        slot.loop.visible = false;
+        continue;
+      }
+      slot.life *= 0.9;
+      slot.radius *= 1.034 + settings.speed * 0.012 + snap.rms * 0.01;
+      slot.loop.scale.setScalar(slot.radius);
+      const mat = slot.loop.material;
+      if (mat instanceof LineBasicMaterial) {
+        mat.color.copy(accent);
+        mat.opacity = slot.life * (0.55 + kick * 0.25);
+      }
+      if (slot.life < 0.04 || slot.radius > 4.2) {
+        slot.life = 0;
+        slot.loop.visible = false;
+      }
+    }
 
-    theta += 0.0011 * settings.speed * (0.7 + snap.mid);
-    const dist = 4.7 - kick * 0.28 - snap.rms * 0.15;
-    const height = 1.45 + snap.low * 0.2;
+    const breathe = 1 + snap.rms * 0.045 + kick * 0.035;
+    root.scale.setScalar(breathe);
+
+    theta += 0.0014 * settings.speed * (0.65 + snap.mid * 0.7);
+    const dist = 5.15 - kick * 0.18 - snap.rms * 0.12;
+    const height = 1.72 + snap.low * 0.22;
     camera.position.set(Math.cos(theta) * dist, height, Math.sin(theta) * dist);
-    camera.lookAt(0, 0.05, 0);
+    camera.lookAt(0, 0.08, 0);
 
     if (bloomPass) {
-      bloomPass.strength = 0.42 + glow * 0.85 + snap.rms * 0.25;
-      bloomPass.radius = 0.38 + glow * 0.2;
+      bloomPass.strength = 0.22 + glow * 0.42 + snap.rms * 0.12;
+      bloomPass.radius = 0.22 + glow * 0.12;
     }
     if (profile.bloomPass && composer) {
       composer.render();
@@ -328,35 +280,248 @@ export function createOrbScene(host: HTMLElement, after?: HTMLCanvasElement | nu
 
   const dispose = () => {
     dropComposer();
-    orbGeo.dispose();
-    orbMat.dispose();
-    core.geometry.dispose();
-    coreMat.dispose();
-    island.geometry.dispose();
-    islandMat.dispose();
-    rim.geometry.dispose();
-    rimMat.dispose();
-    pointsGeo.dispose();
-    pointsMat.dispose();
+    wallMesh.geometry.dispose();
+    wallMat.dispose();
+    crown.geometry.dispose();
+    crownMat.dispose();
+    frame.geometry.dispose();
+    frameMat.dispose();
+    ground.geometry.dispose();
+    groundMat.dispose();
+    spine.geometry.dispose();
+    spineMat.dispose();
+    for (const loop of bands) {
+      loop.geometry.dispose();
+    }
+    for (const mat of bandMats) mat.dispose();
+    for (const slot of shockPool) {
+      slot.loop.geometry.dispose();
+      const mat = slot.loop.material;
+      if (mat instanceof LineBasicMaterial) mat.dispose();
+    }
+    shockMat.dispose();
     renderer.dispose();
     renderer.domElement.remove();
   };
 
-  rebuildPoints(profileFor("medium").orbPoints);
   return { resize, draw, dispose };
 }
 
-function floatCopy(attr: { array: ArrayLike<number> }): Float32Array {
-  return Float32Array.from(attr.array);
+function hexAngle(index: number, sides = SIDES): number {
+  return (index / sides) * Math.PI * 2 - Math.PI / 6;
 }
 
-function spawnPoint(spread: boolean): { x: number; y: number; z: number; life: number } {
-  const a = Math.random() * Math.PI * 2;
-  const r = spread ? 0.4 + Math.random() * 2.1 : 0.55 + Math.random() * 0.7;
-  return {
-    x: Math.cos(a) * r,
-    y: spread ? -0.8 + Math.random() * 1.8 : -0.3 + Math.random() * 0.6,
-    z: Math.sin(a) * r,
-    life: 40 + Math.random() * 90,
-  };
+function hexPoint(index: number, radius: number, sides = SIDES): { x: number; z: number } {
+  const a = hexAngle(index, sides);
+  return { x: Math.cos(a) * radius, z: Math.sin(a) * radius };
+}
+
+function binAt(bins: number[], i: number, count: number, mirror: boolean): number {
+  if (count <= 0) return 0;
+  const clamped = Math.min(count - 1, Math.max(0, i));
+  const src = mirror ? (clamped < count / 2 ? count - 1 - clamped : clamped) : clamped;
+  return bins[src] ?? 0;
+}
+
+function barHeight(energy: number, snap: AudioSnapshot, kick: number): number {
+  return BASE_H + energy * SPAN_H + snap.rms * 0.16 + kick * 0.1;
+}
+
+function makeWallGeometry(cols: number): BufferGeometry {
+  const geo = new BufferGeometry();
+  const vertsPerSide = (cols + 1) * 2;
+  const positions = new Float32Array(SIDES * vertsPerSide * 3);
+  const colors = new Float32Array(SIDES * vertsPerSide * 3);
+  const indices: number[] = [];
+  for (let s = 0; s < SIDES; s += 1) {
+    const base = s * vertsPerSide;
+    for (let i = 0; i < cols; i += 1) {
+      const a = base + i * 2;
+      indices.push(a, a + 2, a + 1, a + 1, a + 2, a + 3);
+    }
+  }
+  geo.setAttribute("position", new BufferAttribute(positions, 3));
+  geo.setAttribute("color", new BufferAttribute(colors, 3));
+  geo.setIndex(indices);
+  return geo;
+}
+
+function makeCrownGeometry(cols: number): BufferGeometry {
+  const geo = new BufferGeometry();
+  const count = SIDES * cols + 1;
+  geo.setAttribute("position", new BufferAttribute(new Float32Array(count * 3), 3));
+  geo.setAttribute("color", new BufferAttribute(new Float32Array(count * 3), 3));
+  return geo;
+}
+
+function makeSpineGeometry(count: number): BufferGeometry {
+  const geo = new BufferGeometry();
+  geo.setAttribute("position", new BufferAttribute(new Float32Array(count * 3), 3));
+  geo.setAttribute("color", new BufferAttribute(new Float32Array(count * 3), 3));
+  return geo;
+}
+
+function makeFrameGeometry(): BufferGeometry {
+  const positions: number[] = [];
+  for (let i = 0; i < SIDES; i += 1) {
+    const a = hexPoint(i, RADIUS);
+    const b = hexPoint(i + 1, RADIUS);
+    positions.push(a.x, GROUND_Y, a.z, b.x, GROUND_Y, b.z);
+    positions.push(a.x, GROUND_Y, a.z, a.x, GROUND_Y + BASE_H, a.z);
+    positions.push(a.x, GROUND_Y + BASE_H, a.z, b.x, GROUND_Y + BASE_H, b.z);
+  }
+  const geo = new BufferGeometry();
+  geo.setAttribute("position", new BufferAttribute(new Float32Array(positions), 3));
+  return geo;
+}
+
+function makeGroundGeometry(): BufferGeometry {
+  const positions: number[] = [];
+  const rings = [0.55, 0.9, 1.28, 1.72, 2.2];
+  for (const r of rings) {
+    for (let i = 0; i < SIDES; i += 1) {
+      const a = hexPoint(i, r);
+      const b = hexPoint(i + 1, r);
+      positions.push(a.x, GROUND_Y, a.z, b.x, GROUND_Y, b.z);
+    }
+  }
+  for (let i = 0; i < SIDES; i += 1) {
+    const a = hexPoint(i, 0.2);
+    const b = hexPoint(i, 2.2);
+    positions.push(a.x, GROUND_Y, a.z, b.x, GROUND_Y, b.z);
+  }
+  const geo = new BufferGeometry();
+  geo.setAttribute("position", new BufferAttribute(new Float32Array(positions), 3));
+  return geo;
+}
+
+function makeHexLoop(radius: number): BufferGeometry {
+  const positions = new Float32Array(SIDES * 3);
+  for (let i = 0; i < SIDES; i += 1) {
+    const p = hexPoint(i, radius);
+    positions[i * 3] = p.x;
+    positions[i * 3 + 1] = 0;
+    positions[i * 3 + 2] = p.z;
+  }
+  const geo = new BufferGeometry();
+  geo.setAttribute("position", new BufferAttribute(positions, 3));
+  return geo;
+}
+
+function updateWalls(
+  geo: BufferGeometry,
+  bins: number[],
+  settings: Settings,
+  snap: AudioSnapshot,
+  kick: number,
+): void {
+  const pos = geo.getAttribute("position");
+  const col = geo.getAttribute("color");
+  if (!pos || !col) return;
+  const cols = Math.round(pos.count / (SIDES * 2) - 1);
+  if (cols < 1) return;
+
+  for (let s = 0; s < SIDES; s += 1) {
+    const a0 = hexAngle(s);
+    const a1 = hexAngle(s + 1);
+    for (let i = 0; i <= cols; i += 1) {
+      const t = i / cols;
+      const a = a0 + (a1 - a0) * t;
+      const x = Math.cos(a) * RADIUS;
+      const z = Math.sin(a) * RADIUS;
+      const e = binAt(bins, Math.min(cols - 1, i), cols, settings.mirror);
+      const h = barHeight(e, snap, kick);
+      const base = (s * (cols + 1) + i) * 2;
+      pos.setXYZ(base, x, GROUND_Y, z);
+      pos.setXYZ(base + 1, x, GROUND_Y + h, z);
+      const rgbLo = paletteRgb(settings.palette, t * 0.7 + s / SIDES / 6, 0.35 + e * 0.4);
+      const rgbHi = paletteRgb(settings.palette, 0.35 + t * 0.6, 0.7 + e + snap.rms);
+      col.setXYZ(base, rgbLo[0] / 255, rgbLo[1] / 255, rgbLo[2] / 255);
+      col.setXYZ(base + 1, rgbHi[0] / 255, rgbHi[1] / 255, rgbHi[2] / 255);
+    }
+  }
+  pos.needsUpdate = true;
+  col.needsUpdate = true;
+}
+
+function updateCrown(
+  geo: BufferGeometry,
+  bins: number[],
+  settings: Settings,
+  snap: AudioSnapshot,
+  kick: number,
+): void {
+  const pos = geo.getAttribute("position");
+  const col = geo.getAttribute("color");
+  if (!pos || !col) return;
+  const cols = Math.round((pos.count - 1) / SIDES);
+  if (cols < 1) return;
+  let n = 0;
+  for (let s = 0; s < SIDES; s += 1) {
+    const a0 = hexAngle(s);
+    const a1 = hexAngle(s + 1);
+    for (let i = 0; i < cols; i += 1) {
+      const t = i / cols;
+      const a = a0 + (a1 - a0) * t;
+      const e = binAt(bins, i, cols, settings.mirror);
+      const h = barHeight(e, snap, kick);
+      pos.setXYZ(n, Math.cos(a) * RADIUS, GROUND_Y + h, Math.sin(a) * RADIUS);
+      const rgb = paletteRgb(settings.palette, 0.55 + t * 0.4, 1);
+      col.setXYZ(n, rgb[0] / 255, rgb[1] / 255, rgb[2] / 255);
+      n += 1;
+    }
+  }
+  const first = hexPoint(0, RADIUS);
+  const e0 = binAt(bins, 0, cols, settings.mirror);
+  pos.setXYZ(n, first.x, GROUND_Y + barHeight(e0, snap, kick), first.z);
+  const tip = paletteRgb(settings.palette, 0.85, 1);
+  col.setXYZ(n, tip[0] / 255, tip[1] / 255, tip[2] / 255);
+  pos.needsUpdate = true;
+  col.needsUpdate = true;
+}
+
+function updateSpine(geo: BufferGeometry, snap: AudioSnapshot, settings: Settings, now: number): void {
+  const pos = geo.getAttribute("position");
+  const col = geo.getAttribute("color");
+  if (!pos || !col) return;
+  const n = pos.count;
+  const height = SPAN_H + BASE_H;
+  for (let i = 0; i < n; i += 1) {
+    const t = n <= 1 ? 0 : i / (n - 1);
+    const wave = snap.time.length ? sampleWave(snap, i, n) : 0.08 * Math.sin(now * 0.002 + t * 10);
+    const phase = snap.time.length ? sampleWave(snap, (i + Math.floor(n * 0.25)) % n, n) : wave * 0.4;
+    const x = wave * (0.42 + snap.rms * 0.2) * (settings.mirror ? 1 : 0.85);
+    const z = phase * 0.22;
+    pos.setXYZ(i, x, GROUND_Y + 0.08 + t * height, z);
+    const rgb = paletteRgb(settings.palette, 0.2 + t * 0.7, 0.75 + snap.peak);
+    col.setXYZ(i, rgb[0] / 255, rgb[1] / 255, rgb[2] / 255);
+  }
+  pos.needsUpdate = true;
+  col.needsUpdate = true;
+}
+
+function updateBands(
+  bands: LineLoop[],
+  mats: LineBasicMaterial[],
+  settings: Settings,
+  snap: AudioSnapshot,
+  pulse: number,
+  kick: number,
+): void {
+  const specs = [
+    { e: snap.low, y: GROUND_Y + 0.18, r: RADIUS * (1.08 + snap.low * 0.22 + kick * 0.08), t: 0.15 },
+    { e: snap.mid, y: GROUND_Y + 0.85 + pulse * 0.12, r: RADIUS * (0.78 + snap.mid * 0.2), t: 0.5 },
+    { e: snap.high, y: GROUND_Y + 1.55 + snap.high * 0.2, r: RADIUS * (0.46 + snap.high * 0.28), t: 0.85 },
+  ];
+  for (let i = 0; i < bands.length; i += 1) {
+    const loop = bands[i];
+    const mat = mats[i];
+    const spec = specs[i];
+    if (!loop || !mat || !spec) continue;
+    loop.position.y = spec.y;
+    loop.scale.setScalar(spec.r);
+    const rgb = paletteRgb(settings.palette, spec.t, 0.6 + spec.e);
+    mat.color.setRGB(rgb[0] / 255, rgb[1] / 255, rgb[2] / 255);
+    mat.opacity = 0.18 + spec.e * 0.55 + kick * 0.12;
+  }
 }
