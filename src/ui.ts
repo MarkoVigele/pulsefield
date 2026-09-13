@@ -302,7 +302,7 @@ export function mountUi(parent: HTMLElement, lab: AudioLab): UiHandles {
               </div>
               <p class="hint" id="quality-hint">Niedrig spart Dichte und Leuchten. Mobil startet auf Niedrig.</p>
               <p class="hint hint--note" id="orb-note" hidden>
-                Lichtinsel in 3D braucht Mittel oder Hoch. Niedrig bleibt beim 2D-Stand-in.
+                Prisma in 3D braucht Mittel oder Hoch. Niedrig bleibt beim 2D-Stand-in.
               </p>
             </div>
           </details>
@@ -939,12 +939,12 @@ function setText(root: ParentNode, sel: string, value: string): void {
 function qualityHintFor(quality: Quality, preset: PresetId): string {
   if (preset === "orb") {
     if (quality === "low") {
-      return "Niedrig: 2D-Stand-in, kein Three.js — Mobil bleibt damit nutzbar. Mittel oder Hoch schaltet die weiche 3D-Kugel ein.";
+      return "Niedrig: 2D-Stand-in, kein Three.js. Mobil bleibt damit nutzbar. Mittel oder Hoch schaltet das 3D-Prisma ein.";
     }
     if (quality === "medium") {
-      return "Mittel: 3D an, ohne schweren Bloom-Pass. Weniger Facetten und Punkte als Hoch.";
+      return "Mittel: 3D-Prisma an, ohne schweren Bloom-Pass. Weniger Kanten als Hoch.";
     }
-    return "Hoch: volle 3D-Lichtinsel, Bloom-Pass, mehr Facetten und Punkte.";
+    return "Hoch: volles 3D-Prisma, Bloom-Pass, mehr Kanten entlang der Flächen.";
   }
   if (quality === "low") {
     return "Niedrig: halbe Dichte, schwächeres Leuchten, Auflösung 1×. Mobil startet hier.";

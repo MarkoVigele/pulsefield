@@ -1,7 +1,7 @@
 import { resetMemoryStorage } from "./test-storage.ts";
 import assert from "node:assert/strict";
 import { beforeEach, test } from "node:test";
-import { PRESET_LABEL, PRESETS, presetDefaults } from "./presets.ts";
+import { PRESET_HINT, PRESET_LABEL, PRESETS, presetDefaults } from "./presets.ts";
 import { particleBudget, scaledDensity } from "./quality.ts";
 import {
   DEFAULT_FPS_MODE,
@@ -42,7 +42,8 @@ test("six presets have German or established lab names", () => {
   assert.equal(PRESET_LABEL.ribbon, "Wellenband");
   assert.equal(PRESET_LABEL.particles, "Partikelfeld");
   assert.equal(PRESET_LABEL.bloom, "Bloomraster");
-  assert.equal(PRESET_LABEL.orb, "Lichtinsel");
+  assert.equal(PRESET_LABEL.orb, "Prisma");
+  assert.equal(PRESET_HINT.orb, "Spektrum als Kanten");
 });
 
 test("each preset ships distinct defaults", () => {
@@ -57,7 +58,7 @@ test("each preset ships distinct defaults", () => {
   assert.notEqual(bloom.bloom, bars.bloom);
   assert.equal(ring.mirror, true);
   assert.equal(particles.palette, "ember");
-  assert.equal(orb.palette, "plasma");
+  assert.equal(orb.palette, "signal");
   assert.equal(orb.background, "void");
 });
 
@@ -128,7 +129,7 @@ test("unknown preset falls back to bars", () => {
   assert.equal(settings.preset, "bars");
 });
 
-test("Lichtinsel persists as sixth preset", () => {
+test("Prisma persists as sixth preset", () => {
   let state = defaultSettings("orb", false);
   assert.equal(state.preset, "orb");
   assert.equal(state.palette, presetDefaults("orb", false).palette);

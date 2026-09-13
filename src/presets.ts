@@ -22,7 +22,7 @@ export const PRESET_LABEL: Record<PresetId, string> = {
   ribbon: "Wellenband",
   particles: "Partikelfeld",
   bloom: "Bloomraster",
-  orb: "Lichtinsel",
+  orb: "Prisma",
 };
 
 export const PRESET_HINT: Record<PresetId, string> = {
@@ -31,7 +31,7 @@ export const PRESET_HINT: Record<PresetId, string> = {
   ribbon: "Zeitwelle als Band",
   particles: "Schwarm aus Transienten",
   bloom: "Leuchtendes Zellenraster",
-  orb: "Weiche 3D-Kugel",
+  orb: "Spektrum als Kanten",
 };
 
 export const DENSITY_LABEL: Record<PresetId, string> = {
@@ -40,7 +40,7 @@ export const DENSITY_LABEL: Record<PresetId, string> = {
   ribbon: "Segmente",
   particles: "Partikel",
   bloom: "Zellen",
-  orb: "Facetten",
+  orb: "Kanten",
 };
 
 export const TUNE_KEYS = [
@@ -140,13 +140,13 @@ export function presetDefaults(preset: PresetId, mobile = isMobileLab()): Tune {
     case "orb":
       return {
         ...shared,
-        palette: "plasma",
-        bloom: mobile ? 0.45 : 0.8,
-        barCount: mobile ? 36 : 64,
-        speed: 0.8,
+        palette: "signal",
+        bloom: mobile ? 0.32 : 0.5,
+        barCount: mobile ? 40 : 72,
+        speed: 0.95,
         background: "void",
-        sensitivity: mobile ? 1.4 : 1.25,
-        smoothing: 0.7,
+        sensitivity: mobile ? 1.35 : 1.2,
+        smoothing: 0.62,
       };
     default:
       return shared;
